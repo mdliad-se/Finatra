@@ -1,0 +1,12 @@
+<resources>
+    <!-- Jinatra brand -->
+    <color name="deep_teal">#0A756C</color>
+    <color name="sweet_cream">#FFEACF</color>
+    <color name="mist_teal">#E0F0EE</color>
+    <color name="warm_white">#FFF8F2</color>
+    <color name="deep_ink">#0F1F1E</color>
+    <color name="ink">#1A1A1A</color>
+
+    <!-- Adaptive icon background (Dark variant = Deep Teal) -->
+    <color name="ic_launcher_background">#0A756C</color>
+</resources>

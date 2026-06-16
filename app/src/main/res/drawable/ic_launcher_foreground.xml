@@ -1,0 +1,44 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Finatra logo mark: bold rounded "F" + solid node top-right, Sweet Cream on Deep Teal field. -->
+    <!-- All filled paths, centered in ~66dp safe zone (21..87). -->
+
+    <!-- Vertical stem (rounded ends) -->
+    <path
+        android:fillColor="#FFEACF"
+        android:pathData="M38,34
+            h11
+            v40
+            a5.5,5.5 0 0 1 -11,0
+            z" />
+
+    <!-- Top arm (rounded right end) -->
+    <path
+        android:fillColor="#FFEACF"
+        android:pathData="M38,34
+            h26
+            a5.5,5.5 0 0 1 0,11
+            h-26
+            z" />
+
+    <!-- Middle arm (rounded right end), shorter -->
+    <path
+        android:fillColor="#FFEACF"
+        android:pathData="M38,52
+            h20
+            a5.5,5.5 0 0 1 0,11
+            h-20
+            z" />
+
+    <!-- Node: solid filled circle at upper-right -->
+    <path
+        android:fillColor="#FFEACF"
+        android:pathData="M75,33
+            m-8,0
+            a8,8 0 1 0 16,0
+            a8,8 0 1 0 -16,0
+            z" />
+</vector>

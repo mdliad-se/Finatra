@@ -1,0 +1,8 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base launch theme; Compose drives in-app theming. Warm background, never pure white/black. -->
+    <style name="Theme.Finatra" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/warm_white</item>
+        <item name="android:statusBarColor">@color/warm_white</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+    </style>
+</resources>
