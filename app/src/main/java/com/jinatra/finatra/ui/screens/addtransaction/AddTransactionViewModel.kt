@@ -187,17 +187,33 @@ class AddTransactionViewModel @Inject constructor(
         _state.value = _state.value.copy(splits = _state.value.splits.mapIndexed { i, it -> if (i == index) it.copy(amount = clean) else it })
     }
 
-    /** Naive on-device natural-language parse (fallback when AI unavailable). */
+    /** Naive on-device natural-language parse (fallback when AI unavailable). Also infers the
+     *  category from keywords so quick-add picks a category even without an AI key (PRD 6.9). */
     fun quickParse(text: String) {
         val amount = Regex("""\d+(?:\.\d+)?""").find(text)?.value ?: ""
         val note = text.replace(Regex("""(spent|paid|got|received|on|for|today|yesterday)""", RegexOption.IGNORE_CASE), "")
             .replace(amount, "").trim().replace(Regex("\\s+"), " ")
         val income = Regex("(received|got|salary|income)", RegexOption.IGNORE_CASE).containsMatchIn(text)
+        val type = if (income) TransactionType.INCOME else TransactionType.EXPENSE
         _state.value = _state.value.copy(
             amount = amount,
             note = note.replaceFirstChar { it.uppercase() },
-            type = if (income) TransactionType.INCOME else TransactionType.EXPENSE,
+            type = type,
+            // Keep the existing category unless a keyword clearly maps to one.
+            categoryId = inferCategoryId(text, type == TransactionType.INCOME) ?: _state.value.categoryId,
         )
+    }
+
+    /** Best-effort keyword → category match against the user's own categories, restricted to the
+     *  income/expense polarity. Returns the matching category id, or null when nothing maps. */
+    private fun inferCategoryId(text: String, isIncome: Boolean): Long? {
+        val t = text.lowercase()
+        val target = CATEGORY_KEYWORDS.firstNotNullOfOrNull { (category, keywords) ->
+            category.takeIf { keywords.any { kw -> t.contains(kw) } }
+        } ?: return null
+        return _state.value.categories
+            .firstOrNull { it.parentId == null && it.isIncome == isIncome && it.name.equals(target, true) }
+            ?.id
     }
 
     /** AI natural-language parse (PRD 6.9). Falls back to [quickParse] if AI returns nothing. */
@@ -320,5 +336,30 @@ class AddTransactionViewModel @Inject constructor(
             if (s.isEditing) repo.updateTransaction(tx) else repo.addTransaction(tx)
             onDone()
         }
+    }
+
+    companion object {
+        /**
+         * Offline keyword hints mapping a default category name to substrings commonly found in a
+         * quick-add phrase. Used by [inferCategoryId]; matching is case-insensitive and stops at the
+         * first category whose keywords appear in the text. Only categories the user actually has
+         * (matched by name) are applied, so custom/renamed setups degrade gracefully.
+         */
+        private val CATEGORY_KEYWORDS: List<Pair<String, List<String>>> = listOf(
+            "Groceries" to listOf("grocery", "groceries", "supermarket", "vegetable", "fruit"),
+            "Food" to listOf("lunch", "dinner", "breakfast", "food", "restaurant", "cafe", "coffee", "snack", "meal", "pizza", "burger"),
+            "Transport" to listOf("uber", "taxi", "bus", "train", "fuel", "petrol", "gas ", "transport", "fare", "parking", "metro", "ride"),
+            "Housing" to listOf("rent", "mortgage", "housing"),
+            "Health" to listOf("gym", "doctor", "medicine", "pharmacy", "health", "hospital", "clinic", "dentist"),
+            "Entertainment" to listOf("movie", "cinema", "game", "netflix", "spotify", "concert", "entertain"),
+            "Shopping" to listOf("shopping", "shirt", "clothes", "shoes", "amazon", "mall", "dress"),
+            "Bills" to listOf("bill", "electricity", "water bill", "internet", "phone bill", "utility", "recharge", "subscription"),
+            "Education" to listOf("school", "course", "tuition", "education", "class"),
+            // Income
+            "Salary" to listOf("salary", "paycheck", "payroll", "wage"),
+            "Business" to listOf("business", "client", "invoice", "sale"),
+            "Gifts" to listOf("gift", "present"),
+            "Investments" to listOf("dividend", "interest", "investment", "stock"),
+        )
     }
 }

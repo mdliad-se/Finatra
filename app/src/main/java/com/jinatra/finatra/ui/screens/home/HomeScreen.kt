@@ -37,8 +37,8 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.foundation.lazy.items
@@ -416,7 +416,7 @@ private fun BalanceHeroCard(
                 Money.format(netWorthChange, currency) + " this month"
             }
             val trendColor = if (isPositive) Color(0xFF7ABE5A) else MaterialTheme.colorScheme.error
-            val trendIcon = if (isPositive) Icons.Filled.TrendingUp else Icons.Filled.TrendingDown
+            val trendIcon = if (isPositive) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown
             
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -646,30 +646,6 @@ private fun HealthScoreCard(h: HealthScore) {
         Spacer(Modifier.height(6.dp))
         Text("Budget adherence · savings rate · spending trends",
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-/** Compact single-budget row: category name, spent/total, and a progress bar that turns red when over. */
-@Composable
-private fun BudgetMiniRow(bp: BudgetProgress, currency: String) {
-    val fraction = if (bp.budget.amount > 0) (bp.spent / bp.budget.amount).toFloat().coerceIn(0f, 1f) else 0f
-    val over = bp.spent > bp.budget.amount
-    Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(bp.categoryName, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "${Money.format(bp.spent, currency)} / ${Money.format(bp.budget.amount, currency)}",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (over) FinatraTheme.expense else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        LinearProgressIndicator(
-            progress = { fraction },
-            modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
-            color = if (over) FinatraTheme.expense else MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-        )
     }
 }
 

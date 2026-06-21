@@ -156,6 +156,11 @@ interface TransactionDao {
     @Query("SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='EXPENSE' AND categoryId=:categoryId AND dateTime BETWEEN :start AND :end")
     suspend fun spentInCategory(categoryId: Long, start: Long, end: Long): Double
 
+    /** Category expense summed per currency, so mixed-currency spend can be converted to a base
+     *  currency before comparing against a budget limit (see FinanceRepository.convertedSpentInCategory). */
+    @Query("SELECT currency, COALESCE(SUM(amount),0) AS total FROM transactions WHERE type='EXPENSE' AND categoryId=:categoryId AND dateTime BETWEEN :start AND :end GROUP BY currency")
+    suspend fun spentInCategoryByCurrency(categoryId: Long, start: Long, end: Long): List<CurrencySum>
+
     @Query("SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type = :type AND accountId = :acc AND dateTime BETWEEN :start AND :end")
     suspend fun totalByTypeForAccount(type: String, acc: Long, start: Long, end: Long): Double
 

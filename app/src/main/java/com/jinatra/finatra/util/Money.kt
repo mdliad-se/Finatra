@@ -8,9 +8,9 @@ import java.util.Locale
  * Currency formatting helpers used across the UI.
  *
  * Amounts are plain [Double] values (the app stores monetary amounts as doubles, not minor units).
- * Formatting always uses two decimal places and a fixed [Locale.US] grouping/decimal convention
- * (comma thousands separator, dot decimal) so output is stable regardless of device locale; only the
- * currency symbol varies by code.
+ * Formatting uses two decimal places and the active locale's grouping/decimal convention and digits
+ * (e.g. Bengali shows ৳১,২৩৪.৫৬), so output follows the user's selected language; the currency symbol
+ * is resolved separately by ISO code via [getSymbol].
  */
 object Money {
     // Preferred display symbols by ISO 4217 code; overrides the JDK symbol, which can differ by locale.
@@ -43,12 +43,13 @@ object Money {
 
     /**
      * Format [amount] as "<symbol><grouped number>", e.g. `$1,234.56`. Always two decimals, no space
-     * between symbol and number. The sign is preserved as-is (a negative amount yields e.g. `$-5.00`);
-     * use [formatSigned] for an explicit leading +/- on the absolute value.
+     * between symbol and number, using the active locale's separators and digits. The sign is
+     * preserved as-is (a negative amount yields e.g. `$-5.00`); use [formatSigned] for an explicit
+     * leading +/- on the absolute value.
      */
     fun format(amount: Double, currencyCode: String): String {
         val symbol = getSymbol(currencyCode)
-        val formattedNumber = "%,.2f".format(Locale.US, amount)
+        val formattedNumber = "%,.2f".format(Locale.getDefault(), amount)
         return "$symbol$formattedNumber"
     }
 

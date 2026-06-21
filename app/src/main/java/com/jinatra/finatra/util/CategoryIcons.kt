@@ -1,6 +1,8 @@
 package com.jinatra.finatra.util
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Category
@@ -16,12 +18,10 @@ import androidx.compose.material.icons.filled.LocalGroceryStore
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.jinatra.finatra.data.local.entity.AccountType
 
@@ -35,13 +35,13 @@ object CategoryIcons {
         "favorite" -> Icons.Filled.Favorite
         "movie" -> Icons.Filled.Movie
         "shopping_bag" -> Icons.Filled.ShoppingBag
-        "receipt_long" -> Icons.Filled.ReceiptLong
+        "receipt_long" -> Icons.AutoMirrored.Filled.ReceiptLong
         "school" -> Icons.Filled.School
         "local_grocery_store" -> Icons.Filled.LocalGroceryStore
         "payments" -> Icons.Filled.Payments
         "storefront" -> Icons.Filled.Storefront
         "card_giftcard" -> Icons.Filled.CardGiftcard
-        "trending_up" -> Icons.Filled.TrendingUp
+        "trending_up" -> Icons.AutoMirrored.Filled.TrendingUp
         else -> Icons.Filled.Category
     }
 

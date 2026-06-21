@@ -13,7 +13,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -137,14 +136,16 @@ fun FinatraTheme(
     }
     val extra = if (darkTheme) DarkExtra else LightExtra
 
-    // Tint the system bars to match the app background (skipped in @Preview/edit mode).
+    // Match the system bar icon contrast to the theme. The app is edge-to-edge (the bars are
+    // transparent and content draws behind them), so we only set icon appearance — the deprecated
+    // statusBarColor/navigationBarColor setters are intentionally not used. Skipped in @Preview.
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colors.background.toArgb()
-            window.navigationBarColor = colors.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !darkTheme
+            controller.isAppearanceLightNavigationBars = !darkTheme
         }
     }
 

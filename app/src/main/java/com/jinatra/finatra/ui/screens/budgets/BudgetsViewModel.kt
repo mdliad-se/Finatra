@@ -73,7 +73,7 @@ class BudgetsViewModel @Inject constructor(
             // Monthly budgets use the current month; custom budgets use their own date range.
             val (start, end) = if (b.period == BudgetPeriod.MONTHLY) DateUtil.startOfMonth() to DateUtil.endOfMonth()
                 else b.startDate to (b.endDate ?: DateUtil.endOfMonth())
-            BudgetRow(b, cat?.name ?: "—", cat?.colorHex ?: 0xFFE05454, repo.spentInCategory(b.categoryId, start, end))
+            BudgetRow(b, cat?.name ?: "—", cat?.colorHex ?: 0xFFE05454, repo.convertedSpentInCategory(b.categoryId, start, end, s.baseCurrency))
         }
         BudgetsUiState(rows, s.baseCurrency)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BudgetsUiState())

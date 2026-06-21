@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -103,15 +104,21 @@ class MainActivity : FragmentActivity() {
             }
             FinatraTheme(darkTheme = dark, dynamicColor = settings.dynamicColor) {
                 Localized(settings.language) {
-                    if (locked) {
-                        LockScreen(
-                            hasPin = vm.hasPin(),
-                            biometricEnabled = vm.biometricEnabled(),
-                            onSubmitPin = vm::submitPin,
-                            onUnlock = vm::unlock,
-                        )
-                    } else {
+                    // Keep the main UI composed and overlay the lock gate on top while locked, so the
+                    // navigation back stack (the screen the user was on) survives a background re-lock
+                    // instead of being torn down and rebuilt at the Home start destination on unlock.
+                    // The lock screen is a full-screen opaque Surface, so it fully hides the content;
+                    // FLAG_SECURE additionally blocks it from screenshots/recents.
+                    Box {
                         FinatraRoot(onboardingDone = settings.onboardingDone, quizDone = settings.quizDone)
+                        if (locked) {
+                            LockScreen(
+                                hasPin = vm.hasPin(),
+                                biometricEnabled = vm.biometricEnabled(),
+                                onSubmitPin = vm::submitPin,
+                                onUnlock = vm::unlock,
+                            )
+                        }
                     }
                 }
             }

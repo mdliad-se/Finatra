@@ -100,7 +100,11 @@ class RootViewModel @Inject constructor(
      * into a clean, empty state. Returns true if either matched.
      */
     fun submitPin(pin: String): Boolean {
-        if (PinHasher.verify(pin, secure.pinHash)) { unlock(); return true }
+        if (PinHasher.verify(pin, secure.pinHash)) {
+            // Transparently upgrade an old unsalted SHA-256 hash to the salted PBKDF2 format.
+            if (PinHasher.isLegacy(secure.pinHash)) secure.pinHash = PinHasher.hash(pin)
+            unlock(); return true
+        }
         if (PinHasher.verify(pin, secure.decoyPinHash)) {
             sessionManager.setDecoy(true)
             authenticated = true

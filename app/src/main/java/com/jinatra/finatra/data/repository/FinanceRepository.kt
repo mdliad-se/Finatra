@@ -237,6 +237,13 @@ class FinanceRepository @Inject constructor(
     suspend fun spentInCategory(categoryId: Long, start: Long, end: Long) =
         if (session.isDecoy) 0.0 else txns.spentInCategory(categoryId, start, end)
 
+    /** Category expense over a range, each currency bucket converted to [base] before summing, so a
+     *  budget limit (held in the base currency) is compared against correctly across mixed-currency
+     *  accounts. */
+    suspend fun convertedSpentInCategory(categoryId: Long, start: Long, end: Long, base: String): Double =
+        if (session.isDecoy) 0.0
+        else txns.spentInCategoryByCurrency(categoryId, start, end).sumOf { convert(it.total, it.currency, base) }
+
     // --- Recurring ---
     fun observeRecurring(): Flow<List<RecurringTransactionEntity>> = gated(recurring.observeAll(), emptyList())
     suspend fun upsertRecurring(r: RecurringTransactionEntity) = if (session.isDecoy) -1L else recurring.upsert(r)
