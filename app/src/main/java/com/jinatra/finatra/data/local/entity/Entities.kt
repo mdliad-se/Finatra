@@ -5,11 +5,22 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+/** Kind of account a balance is held in. */
 enum class AccountType { CASH, BANK, CREDIT_CARD, MOBILE_WALLET, CRYPTO, TRADING, INVESTMENT }
+
+/** Direction of a transaction: money in, money out, or moved between own accounts. */
 enum class TransactionType { INCOME, EXPENSE, TRANSFER }
+
+/** Budget recurrence: rolling monthly, or a fixed CUSTOM date range. */
 enum class BudgetPeriod { MONTHLY, CUSTOM }
+
+/** How often a recurring transaction fires; CUSTOM uses [RecurringTransactionEntity.intervalDays]. */
 enum class RecurrenceFrequency { DAILY, WEEKLY, MONTHLY, CUSTOM }
 
+/** SAVINGS = a target to reach; DEBT_OWED = money I owe; DEBT_LENT = money owed to me (PRD 6.9). */
+enum class GoalType { SAVINGS, DEBT_OWED, DEBT_LENT }
+
+/** A financial account (wallet, bank, card, etc.) holding a balance in a single [currency]. */
 @Entity(tableName = "accounts")
 data class AccountEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -24,6 +35,8 @@ data class AccountEntity(
     val createdAt: Long,
 )
 
+/** A spending or income category. Supports one level of nesting via [parentId];
+ *  indexed on parentId for fast subcategory lookups. */
 @Entity(
     tableName = "categories",
     indices = [Index("parentId")]
@@ -38,6 +51,11 @@ data class CategoryEntity(
     val isCustom: Boolean = false,
 )
 
+/**
+ * A single money movement. Deleting the owning account cascades to its transactions.
+ * For TRANSFERs, [transferToAccountId] names the destination account. Indexed on accountId,
+ * categoryId, and dateTime to keep the listing and aggregation queries fast.
+ */
 @Entity(
     tableName = "transactions",
     foreignKeys = [
@@ -57,10 +75,12 @@ data class TransactionEntity(
     val note: String = "",
     val tags: String = "",          // comma-separated
     val receiptPath: String? = null,
+    val splitGroupId: Long? = null, // shared id linking parts of one split expense (PRD 6.4)
     val createdAt: Long,
     val updatedAt: Long,
 )
 
+/** A spending limit for one category over a [period]. Indexed on categoryId. */
 @Entity(
     tableName = "budgets",
     indices = [Index("categoryId")]
@@ -75,6 +95,7 @@ data class BudgetEntity(
     val createdAt: Long,
 )
 
+/** A template that auto-generates (or reminds about) transactions on a schedule. */
 @Entity(tableName = "recurring_transactions")
 data class RecurringTransactionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -92,6 +113,7 @@ data class RecurringTransactionEntity(
     val active: Boolean = true,
 )
 
+/** One immutable history record of an action taken on a transaction. */
 @Entity(tableName = "audit_log")
 data class AuditLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -101,10 +123,49 @@ data class AuditLogEntity(
     val timestamp: Long,
 )
 
+/** A currency conversion rate. Composite primary key is the (from, to) pair. */
 @Entity(tableName = "exchange_rates", primaryKeys = ["from", "to"])
 data class ExchangeRateEntity(
     val from: String,
     val to: String,
     val rate: Double,               // 1 [from] = rate [to]
     val updatedAt: Long,
+)
+
+/** Savings goal / debt tracker (PRD 6.9). For SAVINGS: saved/target. For DEBT_*: repaid/total. */
+@Entity(tableName = "goals")
+data class GoalEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val type: GoalType = GoalType.SAVINGS,
+    val targetAmount: Double,
+    val savedAmount: Double = 0.0,   // saved (SAVINGS) or repaid (DEBT_*)
+    val currency: String,
+    val deadline: Long? = null,
+    val colorHex: Long,
+    val iconKey: String = "goal",
+    val createdAt: Long,
+)
+
+/** Saved reusable transaction (PRD 6.4 templates). */
+@Entity(tableName = "tx_templates")
+data class TransactionTemplateEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val type: TransactionType,
+    val amount: Double,
+    val categoryId: Long? = null,
+    val accountId: Long? = null,
+    val note: String = "",
+    val tags: String = "",
+    val createdAt: Long,
+)
+
+/** Persistent AI Coach chat message (PRD 6.11). role = "user" | "ai". */
+@Entity(tableName = "chat_messages")
+data class ChatMessageEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val role: String,
+    val content: String,
+    val timestamp: Long,
 )

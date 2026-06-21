@@ -18,17 +18,25 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * A budget paired with its resolved category and the amount spent against it this period —
+ * the unit rendered by each budget list item.
+ */
 data class BudgetRow(
     val budget: BudgetEntity,
     val categoryName: String,
     val categoryColor: Long,
     val spent: Double,
 ) {
+    /** Spend as a fraction of the limit, clamped to 0..1 for progress display. */
     val fraction: Float get() = if (budget.amount > 0) (spent / budget.amount).toFloat().coerceIn(0f, 1f) else 0f
+    /** True once spend has exceeded the limit. */
     val isOver: Boolean get() = spent > budget.amount
+    /** True when nearing the limit (>= 80%) but not yet over. */
     val isWarning: Boolean get() = !isOver && fraction >= 0.8f
 }
 
+/** UI state for [BudgetsScreen]: all budget rows for the period and the user's base currency. */
 data class BudgetsUiState(
     val rows: List<BudgetRow> = emptyList(),
     val baseCurrency: String = "USD",
@@ -42,6 +50,11 @@ data class BudgetSuggestion(
     val suggested: Double,
 )
 
+/**
+ * Backs [BudgetsScreen]. Builds the per-category budget rows (joining budgets with their
+ * categories and current-period spend) and provides one-tap AI budget recommendations based
+ * on recent spending, with a deterministic fallback when AI is unavailable.
+ */
 @HiltViewModel
 class BudgetsViewModel @Inject constructor(
     private val repo: FinanceRepository,
@@ -49,6 +62,7 @@ class BudgetsViewModel @Inject constructor(
     settings: SettingsRepository,
 ) : ViewModel() {
 
+    // Join budgets with their category and the spend for the budget's active period into display rows.
     val state = combine(
         repo.observeBudgets(),
         repo.observeCategories(),
@@ -56,9 +70,10 @@ class BudgetsViewModel @Inject constructor(
     ) { budgets, cats, s ->
         val rows = budgets.map { b ->
             val cat = cats.firstOrNull { it.id == b.categoryId }
+            // Monthly budgets use the current month; custom budgets use their own date range.
             val (start, end) = if (b.period == BudgetPeriod.MONTHLY) DateUtil.startOfMonth() to DateUtil.endOfMonth()
                 else b.startDate to (b.endDate ?: DateUtil.endOfMonth())
-            BudgetRow(b, cat?.name ?: "—", cat?.colorHex ?: 0xFF0A756C, repo.spentInCategory(b.categoryId, start, end))
+            BudgetRow(b, cat?.name ?: "—", cat?.colorHex ?: 0xFFE05454, repo.spentInCategory(b.categoryId, start, end))
         }
         BudgetsUiState(rows, s.baseCurrency)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BudgetsUiState())
@@ -70,6 +85,7 @@ class BudgetsViewModel @Inject constructor(
     private val _suggestions = MutableStateFlow<List<BudgetSuggestion>>(emptyList())
     val suggestions = _suggestions.asStateFlow()
 
+    /** Remove a budget. */
     fun delete(b: BudgetEntity) { viewModelScope.launch { repo.deleteBudget(b) } }
 
     /** Ask AI for monthly limits based on the last 3 months of spend (PRD 6.9). */
@@ -79,12 +95,14 @@ class BudgetsViewModel @Inject constructor(
             val avg = repo.avgMonthlySpend(3)
             if (avg.isEmpty()) { _suggesting.value = false; onError("Not enough spending history yet"); return@launch }
             val currency = state.value.baseCurrency
+            // Feed the AI a per-category spend summary and ask for recommended limits.
             val summary = avg.joinToString(", ") { "${it.name} ${Money.format(it.avg, currency)}" }
             val rec = ai.recommendBudgets(summary)
             _suggestions.value = if (rec == null) {
                 // Fallback: suggest 90% of average spend per category.
                 avg.map { BudgetSuggestion(it.categoryId, it.name, it.avg, (it.avg * 0.9)) }
             } else {
+                // Match AI limits back to known categories by name; fall back to 90% of average if unmatched.
                 avg.mapNotNull { a ->
                     val match = rec.entries.firstOrNull { it.key.equals(a.name, true) || a.name.contains(it.key, true) }
                     BudgetSuggestion(a.categoryId, a.name, a.avg, match?.value ?: (a.avg * 0.9))
@@ -94,6 +112,7 @@ class BudgetsViewModel @Inject constructor(
         }
     }
 
+    /** Create a monthly budget from a single recommendation and drop it from the suggestion list. */
     fun applySuggestion(s: BudgetSuggestion) {
         viewModelScope.launch {
             repo.upsertBudget(
@@ -106,6 +125,7 @@ class BudgetsViewModel @Inject constructor(
         }
     }
 
+    /** Create monthly budgets from all current recommendations, then clear the list. */
     fun applyAll() {
         val all = _suggestions.value
         viewModelScope.launch {
@@ -121,5 +141,6 @@ class BudgetsViewModel @Inject constructor(
         }
     }
 
+    /** Discard the current recommendations without creating budgets. */
     fun dismissSuggestions() { _suggestions.value = emptyList() }
 }

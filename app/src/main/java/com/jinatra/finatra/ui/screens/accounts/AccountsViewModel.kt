@@ -12,13 +12,19 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** An account paired with its running balance derived from all transactions. */
 data class AccountWithBalance(val account: AccountEntity, val balance: Double)
 
+/**
+ * Backs [AccountsScreen]. Exposes every account with a live balance computed from its opening
+ * balance plus the effect of all transactions, and supports deleting an account.
+ */
 @HiltViewModel
 class AccountsViewModel @Inject constructor(
     private val repo: FinanceRepository,
 ) : ViewModel() {
 
+    // Recompute each account's balance whenever accounts or transactions change.
     val accounts = combine(
         repo.observeAccounts(),
         repo.observeTransactions(),
@@ -26,6 +32,7 @@ class AccountsViewModel @Inject constructor(
         accounts.map { acc ->
             var bal = acc.openingBalance
             txns.forEach { t ->
+                // Apply each transaction's signed effect; transfers move money between two accounts.
                 when (runCatching { TransactionType.valueOf(t.type) }.getOrNull()) {
                     TransactionType.INCOME -> if (t.accountId == acc.id) bal += t.amount
                     TransactionType.EXPENSE -> if (t.accountId == acc.id) bal -= t.amount

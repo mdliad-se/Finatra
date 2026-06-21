@@ -13,6 +13,11 @@ import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Structured result of parsing a free-text transaction description (see [AiService.parseTransaction]).
+ * Every field is nullable — the model may omit or fail to determine any of them, and callers
+ * treat each as an optional pre-fill for the add-transaction form.
+ */
 data class ParsedTx(
     val amount: Double? = null,
     val note: String? = null,
@@ -39,6 +44,11 @@ class AiHttp @Inject constructor(
 ) {
     private val json = "application/json".toMediaType()
 
+    /**
+     * Send [prompt] to the named [provider] ("Claude", "OpenRouter", or anything else → Gemini)
+     * using the user's [key], returning the model's text reply. Runs on the IO dispatcher and
+     * swallows every exception, returning null so callers can fall back gracefully.
+     */
     suspend fun complete(provider: String, prompt: String, key: String): String? = withContext(Dispatchers.IO) {
         runCatching {
             when (provider) {
@@ -49,6 +59,8 @@ class AiHttp @Inject constructor(
         }.getOrNull()
     }
 
+    // Google Gemini: key is passed as a query parameter; reply text is dug out of
+    // candidates[0].content.parts[0].text.
     private fun gemini(prompt: String, key: String): String? {
         val body = JSONObject().put(
             "contents",
@@ -63,6 +75,8 @@ class AiHttp @Inject constructor(
         }
     }
 
+    // Anthropic Claude Messages API: key in x-api-key, fixed api-version header;
+    // reply text is content[0].text.
     private fun claude(prompt: String, key: String): String? {
         val body = JSONObject()
             .put("model", "claude-3-5-haiku-latest")
@@ -80,6 +94,8 @@ class AiHttp @Inject constructor(
         }
     }
 
+    // OpenRouter (OpenAI-compatible chat-completions): key as Bearer token;
+    // reply text is choices[0].message.content.
     private fun openRouter(prompt: String, key: String): String? {
         val body = JSONObject()
             .put("model", "openai/gpt-4o-mini")
@@ -108,6 +124,8 @@ class AiService @Inject constructor(
     private val gemma: GemmaService,
     private val http: AiHttp,
 ) {
+    /** True when AI features can run at all: either an on-device Gemma model is present
+     *  or the user has saved a cloud API key. */
     fun isConfigured(): Boolean = gemma.isAvailable() || !secure.aiApiKey.isNullOrBlank()
 
     /** Low-level single-turn chat. Prefers on-device Gemma, falls back to cloud. Null on failure. */
@@ -153,6 +171,26 @@ class AiService @Inject constructor(
         return parseBudgetJson(raw)
     }
 
+    /** Conversational reply for the budget-planning chat. Null on failure. */
+    suspend fun budgetChat(prompt: String): String? = chat(prompt)?.trim()?.takeIf { it.isNotBlank() }
+
+    /** Extract the final agreed monthly budget limits from a planning conversation.
+     *  Map of category name -> limit. Null if nothing concrete could be parsed. */
+    suspend fun extractBudgets(conversation: String): Map<String, Double>? {
+        val prompt = """
+            Below is a conversation between a user and a budgeting assistant.
+            Extract the MOST RECENT set of MONTHLY budget limits per spending category
+            discussed in the conversation (use the latest concrete numbers proposed or
+            agreed — prefer the user's adjustments over the assistant's defaults).
+            Exclude non-budget lines like total income or leftover savings.
+            Conversation:
+            $conversation
+            Reply ONLY with compact JSON mapping category name to number, e.g. {"Food": 300, "Transport": 120}. No prose. If truly no amounts were discussed, reply {}.
+        """.trimIndent()
+        val raw = chat(prompt) ?: return null
+        return parseBudgetJson(raw)
+    }
+
     /** One-line spending insight for the dashboard (PRD 6.9). */
     suspend fun spendingInsight(summary: String): String? {
         val prompt = "You are a concise personal-finance assistant. Given this month summary: $summary. " +
@@ -160,6 +198,7 @@ class AiService @Inject constructor(
         return chat(prompt)?.trim()?.takeIf { it.isNotBlank() }
     }
 
+    /** Pure parsing helpers, kept in the companion so they can be unit-tested without an [AiService] instance. */
     companion object {
         /** Parse the model's JSON reply into [ParsedTx]; tolerant of surrounding prose. */
         fun parseTxJson(raw: String): ParsedTx? {
@@ -172,6 +211,8 @@ class AiService @Inject constructor(
             )
         }
 
+        /** Slice out the first `{...}` object from [s] so a model that wraps JSON in prose
+         *  still parses; returns the input unchanged when no braces are found. */
         fun extractJson(s: String): String {
             val start = s.indexOf('{'); val end = s.lastIndexOf('}')
             return if (start >= 0 && end > start) s.substring(start, end + 1) else s

@@ -3,96 +3,104 @@ package com.jinatra.finatra.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Jinatra brand anchors (from logo SVGs)
-//   Lite logo: cream field (#FFEACF) + teal mark (#0A756C)
-//   Dark logo: teal field (#0A756C) + cream mark (#FFEACF)
-// Light theme leans on the lite logo, dark theme on the dark logo.
+// Finatra brand: two-tone "red ink on warm field" — matches the logo SVGs.
+//   Lite logo: cream field (#FFEACF) + red mark (#E05454)
+//   Dark logo: dark field (#222222) + red mark (#E05454)
+// Light theme = cream background, red foreground. Dark theme = #222 background,
+// red foreground. Cards are flat/border-only (PRD §5.7), so red is the ink for
+// text, icons, headings, borders and filled accents on a warm/dark canvas.
 // ─────────────────────────────────────────────────────────────────────────────
-val DeepTeal = Color(0xFF0A756C)   // logo teal — dark-mode primaryContainer
-val SweetCream = Color(0xFFFFEACF) // logo cream — accent / highlight
-val MistTeal = Color(0xFFD6E6E4)
-val WarmWhite = Color(0xFFFFF8F2)
-val DeepInk = Color(0xFF0F1F1E)
-val DarkTeal = Color(0xFF1A3330)
-val Ink = Color(0xFF1E1B18)
+val WarmRed = Color(0xFFE05454)        // primary accent — the brand red
+val DeepWarmRed = Color(0xFFC44040)    // pressed / active
+val RedTintLight = Color(0xFFFDF0F0)   // red surface (light)
+val RedTintBorderLight = Color(0xFFF0C8C8)
+val RedTintDark = Color(0xFF2C1A1A)    // red surface (dark)
+val RedTintBorderDark = Color(0xFF3A2020)
+val WarmCream = Color(0xFFFFEACF)      // light background (#FFEACF)
+val WarmVoid = Color(0xFF222222)       // dark background
 
-// ── Light scheme tokens (Material 3 Expressive, from template config) ──────────
-val LightPrimary = Color(0xFF005B53)
+// Logo anchors (used by the launcher/in-app logo, not the UI scheme).
+val SweetCream = Color(0xFFFFEACF)
+val WarmAmber = Color(0xFFE8B85A)      // warning / tertiary warmth (#E8B85A)
+
+// ── Light scheme tokens — cream canvas, red ink ────────────────────────────────
+val LightPrimary = WarmRed
 val LightOnPrimary = Color(0xFFFFFFFF)
-val LightPrimaryContainer = Color(0xFF0A756C)
-val LightOnPrimaryContainer = Color(0xFFA1F8EC)
-val LightInversePrimary = Color(0xFF7FD6CA)
-val LightSecondary = Color(0xFF526160)
+val LightPrimaryContainer = Color(0xFFFADADC)
+val LightOnPrimaryContainer = Color(0xFF410005)
+val LightInversePrimary = RedTintBorderLight
+val LightSecondary = DeepWarmRed
 val LightOnSecondary = Color(0xFFFFFFFF)
-val LightSecondaryContainer = Color(0xFFD6E6E4)
-val LightOnSecondaryContainer = Color(0xFF3B4A48)
-val LightTertiary = Color(0xFF5C4E3A)
+val LightSecondaryContainer = Color(0xFFFFF5E6)
+val LightOnSecondaryContainer = Color(0xFF2C2C2C)
+val LightTertiary = WarmAmber
 val LightOnTertiary = Color(0xFFFFFFFF)
-val LightTertiaryContainer = Color(0xFFF4DFC5)
-val LightOnTertiaryContainer = Color(0xFF524531)
-val LightBackground = Color(0xFFFFF8F2)
-val LightOnBackground = Color(0xFF1E1B18)
-val LightSurface = Color(0xFFFFF8F2)
-val LightOnSurface = Color(0xFF1E1B18)
-val LightSurfaceVariant = Color(0xFFE8E1DC)
-val LightOnSurfaceVariant = Color(0xFF3E4947)
-val LightSurfaceDim = Color(0xFFDFD9D3)
-val LightSurfaceBright = Color(0xFFFFF8F2)
+val LightTertiaryContainer = Color(0xFFFDF0D5)
+val LightOnTertiaryContainer = Color(0xFF5C4E3A)
+val LightBackground = WarmCream
+val LightOnBackground = Color(0xFF1A1A1A)
+val LightOnSurface = Color(0xFF2C2C2C)
+val LightSurface = Color(0xFFFFF5E6)
+val LightSurfaceVariant = Color(0xFFF5DEB3)
+val LightOnSurfaceVariant = Color(0xFF6B5C4E)
+val LightSurfaceDim = Color(0xFFF4EAD8)
+val LightSurfaceBright = Color(0xFFFFFDF9)
 val LightSurfaceContainerLowest = Color(0xFFFFFFFF)
-val LightSurfaceContainerLow = Color(0xFFF9F2EC)
-val LightSurfaceContainer = Color(0xFFF3EDE7)
-val LightSurfaceContainerHigh = Color(0xFFEEE7E1)
-val LightSurfaceContainerHighest = Color(0xFFE8E1DC)
-val LightOutline = Color(0xFF6E7977)
-val LightOutlineVariant = Color(0xFFBDC9C6)
-val LightError = Color(0xFFBA1A1A)
+val LightSurfaceContainerLow = Color(0xFFFFF9F0)
+val LightSurfaceContainer = Color(0xFFFFF5E6)
+val LightSurfaceContainerHigh = Color(0xFFFBF0DF)
+val LightSurfaceContainerHighest = Color(0xFFF5EAC8)
+val LightOutline = Color(0xFFD4B896)
+val LightOutlineVariant = Color(0xFFF5DEB3)
+val LightError = Color(0xFFC0392B)
 val LightOnError = Color(0xFFFFFFFF)
 val LightErrorContainer = Color(0xFFFFDAD6)
 val LightOnErrorContainer = Color(0xFF93000A)
-val LightInverseSurface = Color(0xFF33302C)
-val LightInverseOnSurface = Color(0xFFF6F0EA)
+val LightInverseSurface = Color(0xFF2C2C2C)
+val LightInverseOnSurface = Color(0xFFFFF5E6)
 val LightScrim = Color(0xFF000000)
 
-// ── Dark scheme tokens (deep-ink + teal surfaces, cream accents, bright mint) ──
-val DarkPrimary = Color(0xFF7FD6CA)            // bright mint (inverse-primary)
-val DarkOnPrimary = Color(0xFF003731)
-val DarkPrimaryContainer = Color(0xFF0A756C)   // logo teal — brand link in dark
-val DarkOnPrimaryContainer = Color(0xFF9BF2E6)
-val DarkInversePrimary = Color(0xFF005B53)
-val DarkSecondary = Color(0xFFBACAC8)          // secondary-fixed-dim
-val DarkOnSecondary = Color(0xFF233230)
-val DarkSecondaryContainer = Color(0xFF3B4A48)
-val DarkOnSecondaryContainer = Color(0xFFD6E6E4)
-val DarkTertiary = Color(0xFFD7C4AA)           // warm tan (tertiary-fixed-dim)
+// ── Dark scheme tokens — #222 canvas, red ink ──────────────────────────────────
+val DarkPrimary = WarmRed
+val DarkOnPrimary = Color(0xFFFFFFFF)
+val DarkPrimaryContainer = Color(0xFF5C1F1F)
+val DarkOnPrimaryContainer = Color(0xFFFFDAD6)
+val DarkInversePrimary = DeepWarmRed
+val DarkSecondary = WarmRed
+val DarkOnSecondary = Color(0xFFFFFFFF)
+val DarkSecondaryContainer = Color(0xFF2C2C2C)
+val DarkOnSecondaryContainer = Color(0xFFE0D8D0)
+val DarkTertiary = WarmAmber
 val DarkOnTertiary = Color(0xFF392C16)
 val DarkTertiaryContainer = Color(0xFF524531)
 val DarkOnTertiaryContainer = Color(0xFFF4DFC5)
-val DarkBackground = Color(0xFF0F1F1E)         // deep-ink-bg
-val DarkOnBackground = Color(0xFFEDE3D6)       // warm cream-white (logo-derived)
-val DarkSurface = Color(0xFF0F1F1E)
-val DarkOnSurface = Color(0xFFEDE3D6)
-val DarkSurfaceVariant = Color(0xFF1A3330)     // dark-teal-surface
-val DarkOnSurfaceVariant = Color(0xFFB8C8C5)
-val DarkSurfaceDim = Color(0xFF0F1F1E)
-val DarkSurfaceBright = Color(0xFF354443)
-val DarkSurfaceContainerLowest = Color(0xFF0A1413)
-val DarkSurfaceContainerLow = Color(0xFF14211F)
-val DarkSurfaceContainer = Color(0xFF1A3330)   // card surface (teal-tinted)
-val DarkSurfaceContainerHigh = Color(0xFF233E3A)
-val DarkSurfaceContainerHighest = Color(0xFF2D4844)
-val DarkOutline = Color(0xFF87938F)
-val DarkOutlineVariant = Color(0xFF3D4A47)
-val DarkError = Color(0xFFFFB4AB)
+val DarkBackground = WarmVoid
+val DarkOnBackground = Color(0xFFF5F0EB)
+val DarkSurface = Color(0xFF2C2C2C)
+val DarkOnSurface = Color(0xFFE0D8D0)
+val DarkSurfaceVariant = Color(0xFF333333)
+val DarkOnSurfaceVariant = Color(0xFF9E9E9E)
+val DarkSurfaceDim = Color(0xFF242424)
+val DarkSurfaceBright = Color(0xFF363636)
+val DarkSurfaceContainerLowest = Color(0xFF1C1C1C)
+val DarkSurfaceContainerLow = Color(0xFF242424)
+val DarkSurfaceContainer = Color(0xFF2C2C2C)
+val DarkSurfaceContainerHigh = Color(0xFF333333)
+val DarkSurfaceContainerHighest = Color(0xFF3B3B3B)
+val DarkOutline = Color(0xFF444444)
+val DarkOutlineVariant = Color(0xFF333333)
+val DarkError = Color(0xFFFF6B6B)
 val DarkOnError = Color(0xFF690005)
 val DarkErrorContainer = Color(0xFF93000A)
 val DarkOnErrorContainer = Color(0xFFFFDAD6)
-val DarkInverseSurface = Color(0xFFEDE3D6)
-val DarkInverseOnSurface = Color(0xFF1A3330)
+val DarkInverseSurface = Color(0xFFF5F0EB)
+val DarkInverseOnSurface = WarmVoid
 val DarkScrim = Color(0xFF000000)
 
 // ── Semantic transaction colors (theme-aware via FinatraExtraColors) ───────────
-val IncomeGreenLight = Color(0xFF2E7D5B)
-val ExpenseRedLight = Color(0xFFB0413E)
+// Kept distinct from brand red so income/expense amounts stay legible.
+val IncomeGreenLight = Color(0xFF3D7A5C)
+val ExpenseRedLight = Color(0xFFE05454)
 val IncomeGreenDark = Color(0xFF7FD6A8)
 val ExpenseRedDark = Color(0xFFFFB3A3)
 

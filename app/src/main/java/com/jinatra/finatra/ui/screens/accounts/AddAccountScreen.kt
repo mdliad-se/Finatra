@@ -27,6 +27,14 @@ import com.jinatra.finatra.ui.components.OverlineLabel
 import com.jinatra.finatra.ui.screens.onboarding.label
 import com.jinatra.finatra.util.COMMON_CURRENCIES
 
+/**
+ * Form for creating a new account or editing an existing one (name, type, currency, opening
+ * balance, optional low-balance alert, and card color). Whether it edits is driven by the
+ * `accountId` argument resolved in [AddAccountViewModel].
+ *
+ * @param onDone invoked after a successful save and as the back action.
+ * @param vm holds and validates the editable account form state.
+ */
 @Composable
 fun AddAccountScreen(
     onDone: () -> Unit,
@@ -72,6 +80,7 @@ fun AddAccountScreen(
             OverlineLabel("Card color")
             ColorPickerRow(selected = s.colorHex, onSelect = vm::setColor)
             Spacer(Modifier.height(8.dp))
+            // Save is only enabled once a non-blank name has been entered.
             Button(onClick = { vm.save(onDone) }, enabled = s.name.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                 Text(if (s.isEditing) "Save" else "Add account")
             }

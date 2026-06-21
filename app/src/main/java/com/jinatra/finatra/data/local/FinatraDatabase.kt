@@ -7,17 +7,28 @@ import com.jinatra.finatra.data.local.dao.AccountDao
 import com.jinatra.finatra.data.local.dao.AuditDao
 import com.jinatra.finatra.data.local.dao.BudgetDao
 import com.jinatra.finatra.data.local.dao.CategoryDao
+import com.jinatra.finatra.data.local.dao.ChatDao
 import com.jinatra.finatra.data.local.dao.ExchangeRateDao
+import com.jinatra.finatra.data.local.dao.GoalDao
 import com.jinatra.finatra.data.local.dao.RecurringDao
+import com.jinatra.finatra.data.local.dao.TemplateDao
 import com.jinatra.finatra.data.local.dao.TransactionDao
 import com.jinatra.finatra.data.local.entity.AccountEntity
 import com.jinatra.finatra.data.local.entity.AuditLogEntity
 import com.jinatra.finatra.data.local.entity.BudgetEntity
 import com.jinatra.finatra.data.local.entity.CategoryEntity
+import com.jinatra.finatra.data.local.entity.ChatMessageEntity
 import com.jinatra.finatra.data.local.entity.ExchangeRateEntity
+import com.jinatra.finatra.data.local.entity.GoalEntity
 import com.jinatra.finatra.data.local.entity.RecurringTransactionEntity
 import com.jinatra.finatra.data.local.entity.TransactionEntity
+import com.jinatra.finatra.data.local.entity.TransactionTemplateEntity
 
+/**
+ * The app's Room database (PRD: fully local, offline-first storage).
+ * Current schema version is 5; incremental upgrades are defined in [ALL_MIGRATIONS] and enum
+ * columns are handled by [Converters]. `exportSchema = true` writes JSON schemas for migration tests.
+ */
 @Database(
     entities = [
         AccountEntity::class,
@@ -27,8 +38,11 @@ import com.jinatra.finatra.data.local.entity.TransactionEntity
         RecurringTransactionEntity::class,
         AuditLogEntity::class,
         ExchangeRateEntity::class,
+        GoalEntity::class,
+        ChatMessageEntity::class,
+        TransactionTemplateEntity::class,
     ],
-    version = 2,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -40,4 +54,7 @@ abstract class FinatraDatabase : RoomDatabase() {
     abstract fun recurringDao(): RecurringDao
     abstract fun auditDao(): AuditDao
     abstract fun exchangeRateDao(): ExchangeRateDao
+    abstract fun goalDao(): GoalDao
+    abstract fun chatDao(): ChatDao
+    abstract fun templateDao(): TemplateDao
 }

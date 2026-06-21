@@ -7,6 +7,11 @@
     <color name="deep_ink">#0F1F1E</color>
     <color name="ink">#1A1A1A</color>
 
-    <!-- Adaptive icon background (Dark variant = Deep Teal) -->
-    <color name="ic_launcher_background">#0A756C</color>
+    <!-- App backgrounds (match Compose scheme) -->
+    <color name="warm_cream">#F0EBE3</color>
+    <color name="warm_void">#222222</color>
+
+    <!-- Adaptive icon background — Lite variant = Sweet Cream (#FFEACF), red mark.
+         -night override (values-night/colors.xml) switches to #222 on capable launchers. -->
+    <color name="ic_launcher_background">#FFEACF</color>
 </resources>

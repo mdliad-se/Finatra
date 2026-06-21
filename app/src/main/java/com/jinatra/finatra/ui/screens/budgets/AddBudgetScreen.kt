@@ -27,6 +27,12 @@ import com.jinatra.finatra.ui.components.ExpressiveCard
 import com.jinatra.finatra.ui.components.FinatraTopBar
 import com.jinatra.finatra.ui.components.LabeledDropdown
 
+/**
+ * Form for creating or editing a single budget (one spending limit per category and period).
+ * Lets the user pick an expense category, enter a limit amount and choose the period
+ * (Monthly or Custom). Requires at least one expense category; [onDone] is invoked after a
+ * successful save or when navigating back.
+ */
 @Composable
 fun AddBudgetScreen(
     onDone: () -> Unit,

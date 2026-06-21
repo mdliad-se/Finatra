@@ -13,6 +13,12 @@ object FinanceScheduler {
     private const val WORK_NAME = "finatra_daily_maintenance"
     private const val LAUNCH_WORK = "finatra_maintenance_now"
 
+    /**
+     * Enqueues a daily periodic [MaintenanceWorker] (kept unique, updated if it already
+     * exists) plus a one-time run on launch so time-sensitive checks fire immediately.
+     *
+     * @param context any context; used to obtain the [WorkManager] instance.
+     */
     fun schedule(context: Context) {
         val wm = WorkManager.getInstance(context)
         // Daily background pass.

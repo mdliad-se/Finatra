@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.jinatra.finatra.data.local.entity.AccountEntity
 import com.jinatra.finatra.data.local.entity.CategoryEntity
 import com.jinatra.finatra.data.local.entity.TransactionEntity
+import com.jinatra.finatra.data.local.entity.TransactionTemplateEntity
 import com.jinatra.finatra.data.local.entity.TransactionType
 import com.jinatra.finatra.data.ai.AiService
 import com.jinatra.finatra.data.prefs.SettingsRepository
@@ -17,6 +18,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** One category portion of a split expense (PRD 6.4). */
+data class SplitItem(val categoryId: Long? = null, val amount: String = "")
+
+/**
+ * Full form state for [AddTransactionScreen]. Amount/split fields are kept as strings while
+ * editing. Derived members compute the categories valid for the current type, whether splitting is
+ * allowed, and split totals/validity.
+ */
 data class AddTxState(
     val editingId: Long = -1L,
     val type: TransactionType = TransactionType.EXPENSE,
@@ -33,12 +42,28 @@ data class AddTxState(
     val baseCurrency: String = "USD",
     val aiAvailable: Boolean = false,
     val aiBusy: Boolean = false,
+    val splitMode: Boolean = false,
+    val splits: List<SplitItem> = emptyList(),
+    val templates: List<TransactionTemplateEntity> = emptyList(),
+    val duplicate: TransactionEntity? = null,
 ) {
     val isEditing: Boolean get() = editingId > 0
+    // Top-level categories matching the current type's income/expense polarity.
     val visibleCategories: List<CategoryEntity>
         get() = categories.filter { it.isIncome == (type == TransactionType.INCOME) && it.parentId == null }
+    /** Split is offered only for new expenses. */
+    val canSplit: Boolean get() = !isEditing && type == TransactionType.EXPENSE
+    val splitTotal: Double get() = splits.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+    // A split needs at least two rows, each with a category and a positive amount.
+    val splitValid: Boolean
+        get() = splits.size >= 2 && splits.all { it.categoryId != null && (it.amount.toDoubleOrNull() ?: 0.0) > 0 }
 }
 
+/**
+ * Backs [AddTransactionScreen]. Initializes the form from navigation args (edit an existing
+ * transaction, or preset account/type for a new one), exposes setters for every field, and handles
+ * templates, split expenses, AI parsing/categorization, duplicate detection, and persistence.
+ */
 @HiltViewModel
 class AddTransactionViewModel @Inject constructor(
     private val repo: FinanceRepository,
@@ -47,6 +72,7 @@ class AddTransactionViewModel @Inject constructor(
     savedState: SavedStateHandle,
 ) : ViewModel() {
 
+    // Navigation args: transaction being edited, plus optional preset account/type for new entries.
     private val txId: Long = savedState.get<Long>("txId") ?: -1L
     private val presetAccountId: Long = savedState.get<Long>("accountId") ?: -1L
     private val presetType: String = savedState.get<String>("type") ?: ""
@@ -71,7 +97,42 @@ class AddTransactionViewModel @Inject constructor(
             )
             if (txId > 0) loadExisting(txId)
         }
+        viewModelScope.launch {
+            repo.observeTemplates().collect { tpls -> _state.value = _state.value.copy(templates = tpls) }
+        }
     }
+
+    // --- Templates (PRD 6.4) ---
+    fun applyTemplate(t: TransactionTemplateEntity) {
+        val s = _state.value
+        _state.value = s.copy(
+            type = t.type,
+            amount = if (t.amount > 0) (if (t.amount % 1.0 == 0.0) t.amount.toLong().toString() else t.amount.toString()) else s.amount,
+            categoryId = t.categoryId ?: s.categoryId,
+            accountId = t.accountId ?: s.accountId,
+            note = t.note,
+            tags = t.tags,
+        )
+    }
+
+    fun saveAsTemplate(name: String) {
+        val s = _state.value
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            repo.upsertTemplate(
+                TransactionTemplateEntity(
+                    name = name.trim(), type = s.type, amount = s.amount.toDoubleOrNull() ?: 0.0,
+                    categoryId = if (s.type == TransactionType.TRANSFER) null else s.categoryId,
+                    accountId = s.accountId, note = s.note, tags = s.tags,
+                    createdAt = System.currentTimeMillis(),
+                )
+            )
+        }
+    }
+
+    fun deleteTemplate(t: TransactionTemplateEntity) { viewModelScope.launch { repo.deleteTemplate(t) } }
+
+    fun dismissDuplicate() { _state.value = _state.value.copy(duplicate = null) }
 
     private suspend fun loadExisting(id: Long) {
         repo.transactionById(id)?.let { t ->
@@ -91,6 +152,7 @@ class AddTransactionViewModel @Inject constructor(
     }
 
     fun setType(t: TransactionType) {
+        // Switching type resets the selected category to one matching the new type's polarity.
         val cat = _state.value.categories.firstOrNull { it.isIncome == (t == TransactionType.INCOME) }?.id
         _state.value = _state.value.copy(type = t, categoryId = cat)
     }
@@ -102,6 +164,28 @@ class AddTransactionViewModel @Inject constructor(
     fun setNote(v: String) { _state.value = _state.value.copy(note = v) }
     fun setTags(v: String) { _state.value = _state.value.copy(tags = v) }
     fun setReceipt(path: String?) { _state.value = _state.value.copy(receiptPath = path) }
+
+    // --- Split transaction (PRD 6.4) ---
+    fun toggleSplit(on: Boolean) {
+        val s = _state.value
+        _state.value = if (on) {
+            // Seed two rows; first inherits the currently selected category.
+            s.copy(splitMode = true, splits = listOf(SplitItem(s.categoryId, s.amount), SplitItem()))
+        } else {
+            s.copy(splitMode = false, splits = emptyList())
+        }
+    }
+    fun addSplitRow() { _state.value = _state.value.copy(splits = _state.value.splits + SplitItem()) }
+    fun removeSplitRow(index: Int) {
+        _state.value = _state.value.copy(splits = _state.value.splits.filterIndexed { i, _ -> i != index })
+    }
+    fun setSplitCategory(index: Int, categoryId: Long) {
+        _state.value = _state.value.copy(splits = _state.value.splits.mapIndexed { i, it -> if (i == index) it.copy(categoryId = categoryId) else it })
+    }
+    fun setSplitAmount(index: Int, amount: String) {
+        val clean = amount.filter { it.isDigit() || it == '.' }
+        _state.value = _state.value.copy(splits = _state.value.splits.mapIndexed { i, it -> if (i == index) it.copy(amount = clean) else it })
+    }
 
     /** Naive on-device natural-language parse (fallback when AI unavailable). */
     fun quickParse(text: String) {
@@ -169,12 +253,54 @@ class AddTransactionViewModel @Inject constructor(
         _state.value = _state.value.copy(categories = repo.categoriesNow())
     }
 
-    fun save(onDone: () -> Unit) {
+    /**
+     * Persists the transaction. For new, non-split entries it first checks for a possible
+     * duplicate and surfaces a confirmation dialog (re-invoked with [confirmed] = true on accept).
+     * In split mode it writes each portion as a linked expense; otherwise it inserts/updates a
+     * single transaction. Invokes [onDone] once persisted.
+     */
+    fun save(onDone: () -> Unit, confirmed: Boolean = false) {
         val s = _state.value
-        val amount = s.amount.toDoubleOrNull() ?: return
         val accountId = s.accountId ?: return
         val now = System.currentTimeMillis()
         val account = s.accounts.firstOrNull { it.id == accountId }
+
+        // Duplicate detection (PRD 6.4): warn once on a matching recent entry for new, non-split txns.
+        if (!confirmed && !s.isEditing && !(s.splitMode && s.canSplit)) {
+            val amt = s.amount.toDoubleOrNull()
+            if (amt != null && amt > 0) {
+                viewModelScope.launch {
+                    val dup = repo.findPossibleDuplicate(s.type, accountId, amt)
+                    if (dup != null) _state.value = _state.value.copy(duplicate = dup)
+                    else save(onDone, confirmed = true)
+                }
+                return
+            }
+        }
+
+        // Split expense: persist each portion as a linked transaction (PRD 6.4).
+        if (s.splitMode && s.canSplit) {
+            if (!s.splitValid) return
+            val parts = s.splits.map { sp ->
+                TransactionEntity(
+                    type = TransactionType.EXPENSE,
+                    amount = sp.amount.toDouble(),
+                    currency = account?.currency ?: s.baseCurrency,
+                    dateTime = s.dateTime,
+                    categoryId = sp.categoryId,
+                    accountId = accountId,
+                    note = s.note,
+                    tags = s.tags,
+                    receiptPath = s.receiptPath,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+            }
+            viewModelScope.launch { repo.addSplit(parts); onDone() }
+            return
+        }
+
+        val amount = s.amount.toDoubleOrNull() ?: return
         val tx = TransactionEntity(
             id = if (s.isEditing) s.editingId else 0,
             type = s.type,

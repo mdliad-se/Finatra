@@ -3,42 +3,19 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Finatra logo mark: bold rounded "F" + solid node top-right, Sweet Cream on Deep Teal field. -->
-    <!-- All filled paths, centered in ~66dp safe zone (21..87). -->
+    <!-- True Negan "F" glyph + node, extracted from res/font/negan.otf (matches Logo/SVG).
+         Whole logo scaled + centered to fit the adaptive-icon 66dp safe circle so the
+         node isn't clipped by the launcher/splash circular mask.
+         Warm Red (#E05454) mark on cream (light) / #222 (dark) background.
+         Shared by the launcher icon AND the OS splash (Android 12+ SplashScreen). -->
 
-    <!-- Vertical stem (rounded ends) -->
+    <!-- "F" glyph outline -->
     <path
-        android:fillColor="#FFEACF"
-        android:pathData="M38,34
-            h11
-            v40
-            a5.5,5.5 0 0 1 -11,0
-            z" />
+        android:fillColor="#E05454"
+        android:pathData="M33.41,36.45 L33.41,44.59 L61.33,44.59 L61.33,36.45 L33.41,36.45 Z M33.41,77.17 L41.55,77.17 L41.55,60.88 L53.77,60.88 L53.77,52.74 L33.41,52.74 L33.41,77.17 Z" />
 
-    <!-- Top arm (rounded right end) -->
+    <!-- Node: solid filled circle, upper-right -->
     <path
-        android:fillColor="#FFEACF"
-        android:pathData="M38,34
-            h26
-            a5.5,5.5 0 0 1 0,11
-            h-26
-            z" />
-
-    <!-- Middle arm (rounded right end), shorter -->
-    <path
-        android:fillColor="#FFEACF"
-        android:pathData="M38,52
-            h20
-            a5.5,5.5 0 0 1 0,11
-            h-20
-            z" />
-
-    <!-- Node: solid filled circle at upper-right -->
-    <path
-        android:fillColor="#FFEACF"
-        android:pathData="M75,33
-            m-8,0
-            a8,8 0 1 0 16,0
-            a8,8 0 1 0 -16,0
-            z" />
+        android:fillColor="#E05454"
+        android:pathData="M69.86,30.83 C72.47,30.83 74.59,32.95 74.59,35.56 C74.59,38.18 72.47,40.29 69.86,40.29 C67.24,40.29 65.13,38.18 65.13,35.56 C65.13,32.95 67.24,30.83 69.86,30.83 Z" />
 </vector>

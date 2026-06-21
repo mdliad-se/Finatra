@@ -10,9 +10,12 @@ import com.jinatra.finatra.data.local.entity.AccountEntity
 import com.jinatra.finatra.data.local.entity.AuditLogEntity
 import com.jinatra.finatra.data.local.entity.BudgetEntity
 import com.jinatra.finatra.data.local.entity.CategoryEntity
+import com.jinatra.finatra.data.local.entity.ChatMessageEntity
 import com.jinatra.finatra.data.local.entity.ExchangeRateEntity
+import com.jinatra.finatra.data.local.entity.GoalEntity
 import com.jinatra.finatra.data.local.entity.RecurringTransactionEntity
 import com.jinatra.finatra.data.local.entity.TransactionEntity
+import com.jinatra.finatra.data.local.entity.TransactionTemplateEntity
 import kotlinx.coroutines.flow.Flow
 
 /** Projection: a transaction joined with its category + account display fields. */
@@ -34,6 +37,7 @@ data class TransactionWithDetails(
     val receiptPath: String?,
 )
 
+/** Projection: total expense per category over a period (for analytics/pie charts). */
 data class CategorySpend(
     val categoryId: Long?,
     val categoryName: String?,
@@ -41,11 +45,20 @@ data class CategorySpend(
     val total: Double,
 )
 
+/** Projection: summed amount grouped by currency, used before converting to a base currency. */
 data class CurrencySum(
     val currency: String,
     val total: Double,
 )
 
+/** Aggregated spend for one payee/merchant (transaction note), for payee tracking (PRD 6.8). */
+data class PayeeSpend(
+    val payee: String,
+    val total: Double,
+    val count: Int,
+)
+
+/** CRUD and balance queries for financial accounts. */
 @Dao
 interface AccountDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(a: AccountEntity): Long
@@ -81,6 +94,7 @@ interface AccountDao {
     suspend fun balance(id: Long): Double?
 }
 
+/** CRUD and lookups for spending/income categories, including the parent-child hierarchy. */
 @Dao
 interface CategoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(c: CategoryEntity): Long
@@ -96,6 +110,7 @@ interface CategoryDao {
     @Query("SELECT * FROM categories WHERE parentId IS NULL") suspend fun allTopLevel(): List<CategoryEntity>
 }
 
+/** CRUD plus the analytics/aggregation queries over transactions (totals, spend breakdowns, payees). */
 @Dao
 interface TransactionDao {
     @Insert suspend fun insert(t: TransactionEntity): Long
@@ -162,8 +177,26 @@ interface TransactionDao {
         GROUP BY currency
     """)
     suspend fun totalsByCurrency(type: String, start: Long, end: Long): List<CurrencySum>
+
+    /** Top payees (by note) by expense total in a range (PRD 6.8 merchant tracking). */
+    @Query("""
+        SELECT note AS payee, SUM(amount) AS total, COUNT(*) AS count
+        FROM transactions
+        WHERE type = 'EXPENSE' AND note != '' AND dateTime BETWEEN :start AND :end
+        GROUP BY note COLLATE NOCASE ORDER BY total DESC LIMIT :limit
+    """)
+    suspend fun spendByPayee(start: Long, end: Long, limit: Int): List<PayeeSpend>
+
+    /** Recent transactions matching amount+account+type within [since] (duplicate detection, PRD 6.4). */
+    @Query("""
+        SELECT * FROM transactions
+        WHERE type = :type AND accountId = :accountId AND amount = :amount AND dateTime >= :since
+        ORDER BY dateTime DESC LIMIT 1
+    """)
+    suspend fun matchingSince(type: String, accountId: Long, amount: Double, since: Long): TransactionEntity?
 }
 
+/** CRUD for per-category budget limits. */
 @Dao
 interface BudgetDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(b: BudgetEntity): Long
@@ -172,6 +205,7 @@ interface BudgetDao {
     @Query("SELECT * FROM budgets WHERE id = :id") suspend fun byId(id: Long): BudgetEntity?
 }
 
+/** CRUD for recurring transactions and lookup of those due to run. */
 @Dao
 interface RecurringDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(r: RecurringTransactionEntity): Long
@@ -180,6 +214,7 @@ interface RecurringDao {
     @Query("SELECT * FROM recurring_transactions WHERE active = 1 AND nextRun <= :now") suspend fun due(now: Long): List<RecurringTransactionEntity>
 }
 
+/** Append-only audit log of transaction create/edit/delete actions. */
 @Dao
 interface AuditDao {
     @Insert suspend fun insert(a: AuditLogEntity)
@@ -187,9 +222,36 @@ interface AuditDao {
     @Query("SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 200") fun observeRecent(): Flow<List<AuditLogEntity>>
 }
 
+/** Stored currency conversion rates. Column names `from`/`to` are SQL keywords, hence the backticks. */
 @Dao
 interface ExchangeRateDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(r: ExchangeRateEntity)
     @Query("SELECT * FROM exchange_rates") fun observeAll(): Flow<List<ExchangeRateEntity>>
     @Query("SELECT rate FROM exchange_rates WHERE `from` = :from AND `to` = :to") suspend fun rate(from: String, to: String): Double?
+}
+
+/** CRUD for savings goals / debt trackers. */
+@Dao
+interface GoalDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(g: GoalEntity): Long
+    @Delete suspend fun delete(g: GoalEntity)
+    @Query("SELECT * FROM goals ORDER BY createdAt DESC") fun observeAll(): Flow<List<GoalEntity>>
+    @Query("SELECT * FROM goals WHERE id = :id") suspend fun byId(id: Long): GoalEntity?
+    @Query("SELECT COUNT(*) FROM goals") suspend fun count(): Int
+}
+
+/** Persisted AI Coach chat history (insert, observe in order, clear). */
+@Dao
+interface ChatDao {
+    @Insert suspend fun insert(m: ChatMessageEntity): Long
+    @Query("SELECT * FROM chat_messages ORDER BY timestamp ASC, id ASC") fun observeAll(): Flow<List<ChatMessageEntity>>
+    @Query("DELETE FROM chat_messages") suspend fun clear()
+}
+
+/** CRUD for reusable transaction templates. */
+@Dao
+interface TemplateDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(t: TransactionTemplateEntity): Long
+    @Delete suspend fun delete(t: TransactionTemplateEntity)
+    @Query("SELECT * FROM tx_templates ORDER BY name") fun observeAll(): Flow<List<TransactionTemplateEntity>>
 }

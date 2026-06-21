@@ -8,6 +8,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
+/**
+ * Backs [AuditLogScreen] by exposing the repository's audit-log stream as lifecycle-aware
+ * state. Read-only: it observes entries but never mutates them.
+ */
 @HiltViewModel
 class AuditLogViewModel @Inject constructor(repo: FinanceRepository) : ViewModel() {
     val entries = repo.observeAudit()

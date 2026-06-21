@@ -41,9 +41,21 @@ import com.jinatra.finatra.ui.components.LabeledDropdown
 import com.jinatra.finatra.util.DateUtil
 import com.jinatra.finatra.util.Money
 
+/**
+ * Screen listing the user's recurring transaction templates.
+ *
+ * Shows each template (note, formatted amount, cadence and next-run date) with a delete
+ * action, and a floating action button that opens a dialog to create a new one. The FAB
+ * and add dialog are only available once at least one account exists, since a recurring
+ * transaction must be tied to an account.
+ *
+ * @param onBack invoked when the user navigates back.
+ * @param vm screen state/actions; injected via Hilt by default.
+ */
 @Composable
 fun RecurringScreen(onBack: () -> Unit, vm: RecurringViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    // Controls visibility of the "new recurring" dialog.
     var showAdd by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -82,11 +94,15 @@ fun RecurringScreen(onBack: () -> Unit, vm: RecurringViewModel = hiltViewModel()
         }
     }
 
+    // New-recurring dialog: collects amount, note, account, cadence and the auto-log/remind
+    // choice, then delegates creation to the ViewModel. Local form state lives here so it
+    // resets each time the dialog is reopened.
     if (showAdd && s.accounts.isNotEmpty()) {
         var amount by remember { mutableStateOf("") }
         var note by remember { mutableStateOf("") }
         var account by remember { mutableStateOf(s.accounts.first()) }
         var freq by remember { mutableStateOf(RecurrenceFrequency.MONTHLY) }
+        // true = auto-log the transaction when due; false = only remind.
         var autoLog by remember { mutableStateOf(true) }
         AlertDialog(
             onDismissRequest = { showAdd = false },
@@ -108,6 +124,7 @@ fun RecurringScreen(onBack: () -> Unit, vm: RecurringViewModel = hiltViewModel()
             },
             confirmButton = {
                 TextButton(onClick = {
+                    // Only create if the amount parses to a number; otherwise keep the dialog open.
                     val a = amount.toDoubleOrNull()
                     if (a != null) { vm.add(a, account.id, account.currency, note, freq, autoLog); showAdd = false }
                 }) { Text("Add") }

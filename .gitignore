@@ -13,7 +13,6 @@ build/
 *.apk
 *.aab
 
-# Scratch design/screenshot working files (the committed set lives in docs/screenshots/)
-/Template Design/my screenshots/
-/Template Design/*.png
-/Template Design/template.html
+# Local tooling / agent config (not part of the project source)
+.claude/
+.kotlin/

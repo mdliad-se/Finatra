@@ -10,29 +10,36 @@ Optional AI features (spending insights, natural-language entry, smart categoriz
 
 ## Screenshots
 
-| Home | Accounts | Transactions |
+| Home | Transactions | Budgets |
 |---|---|---|
-| ![Home](docs/screenshots/01-home.png) | ![Accounts](docs/screenshots/02-accounts.png) | ![Transactions](docs/screenshots/03-transactions.png) |
+| ![Home](screenshots/01-home.png) | ![Transactions](screenshots/02-transactions.png) | ![Budgets](screenshots/03-budgets.png) |
 
 | Analytics | Settings |
 |---|---|
-| ![Analytics](docs/screenshots/04-analytics.png) | ![Settings](docs/screenshots/05-settings.png) |
+| ![Analytics](screenshots/04-analytics.png) | ![Settings](screenshots/05-settings.png) |
 
 ---
 
 ## Features
 
 - **Accounts** — Cash, Bank, Credit Card, Mobile Wallet, Crypto, Trading/Brokerage, Investment/Savings. Per-account color & icon, transfers between accounts.
-- **Transactions** — income / expense / transfer; category, account, notes, tags, **receipt photo**; swipe to delete; search & filter; per-transaction **audit log**.
+- **Transactions** — income / expense / transfer; category, account, notes, tags, **receipt photo**, and **split across categories**; swipe to delete; search & filter; reusable **templates**; per-transaction **audit log**.
+- **Recurring transactions** — schedule repeating income/expenses (daily, weekly, monthly, or custom) that post automatically in the background.
 - **Account carousel** — swipe between account cards on the dashboard; each shows balance and quick **Income / Expense** actions, with a per-account spending chart that adapts to the account's color.
-- **Budgets** — monthly or custom-period limits per category, progress bars (safe / warning / over), and **AI-recommended limits** from your spending history.
-- **Analytics** — category donut, income-vs-expense bars, net-worth-over-time trend, and a multi-month report summary.
+- **Budgets** — monthly or custom-period limits per category, traffic-light progress bars (safe / warning / over), a usage donut, a 30-day balance forecast, and a conversational **AI budget planner** that proposes limits from your spending history.
+- **Analytics** — savings-rate donut, category breakdown, income-vs-expense bars, net-worth-over-time trend, top payees, a "what-if" projection, and a multi-month report summary.
+- **Goals** — savings goals with progress tracking and an AI "can I afford it?" check.
+- **AI Coach** — an on-device/cloud chat assistant that answers questions about your finances.
+- **Calendar** — a month view of income and spending day by day.
+- **Achievements** — streaks, badges, and challenges that reward consistent tracking.
 - **Multi-currency** — per-account currency with manual exchange rates; dashboard totals converted to your base currency.
-- **AI (optional)** — natural-language entry ("spent 540 on lunch"), smart categorization, dashboard insights, and budget recommendations. Works with **Gemini / Claude / OpenRouter** (your API key) or **on-device Gemma** (MediaPipe LLM Inference).
+- **AI (optional)** — natural-language entry ("spent 540 on lunch"), smart categorization, dashboard insights, budget planning, goal advice, and the AI Coach. Works with **Gemini / Claude / OpenRouter** (your API key) or **fully on-device Gemma** (MediaPipe LLM Inference). A built-in basic parser handles quick-add even with no AI key.
+- **Onboarding** — a guided first-run setup plus an optional quick quiz that tailors the experience to your money style.
 - **Notifications** — budget overspend alerts, recurring reminders, low-balance warnings, and weekly / monthly summaries (each toggleable).
-- **Security** — PIN & biometric app lock, configurable auto-lock, and screenshot prevention (`FLAG_SECURE`). Sensitive values stored in `EncryptedSharedPreferences`.
+- **Security** — PIN & biometric app lock, configurable auto-lock, an optional **decoy PIN**, and screenshot prevention (`FLAG_SECURE`). Sensitive values stored in `EncryptedSharedPreferences`.
 - **Data portability** — export CSV, import CSV, full JSON backup & restore. Everything stays on the device.
-- **Material 3 Expressive** design with light & dark themes derived from the Jinatra logo, plus optional Material You dynamic color.
+- **Home-screen widget** — a Glance balance widget showing net worth and budget progress at a glance.
+- **Material 3 Expressive** design with light & dark themes derived from the Jinatra logo, plus optional Material You dynamic color, and English / Bengali (বাংলা) localization.
 
 ---
 

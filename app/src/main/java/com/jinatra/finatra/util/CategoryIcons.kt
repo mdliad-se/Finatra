@@ -25,7 +25,9 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.jinatra.finatra.data.local.entity.AccountType
 
+/** Maps stored category/account icon identifiers to Material [ImageVector] icons for display. */
 object CategoryIcons {
+    /** Resolve a category's persisted icon [key] to its icon; unknown keys fall back to a generic Category icon. */
     fun forKey(key: String): ImageVector = when (key) {
         "restaurant" -> Icons.Filled.Restaurant
         "directions_car" -> Icons.Filled.DirectionsCar
@@ -43,6 +45,7 @@ object CategoryIcons {
         else -> Icons.Filled.Category
     }
 
+    /** Icon representing an account's [type] (cash, bank, card, wallet, crypto, etc.). */
     fun forAccount(type: AccountType): ImageVector = when (type) {
         AccountType.CASH -> Icons.Filled.AccountBalanceWallet
         AccountType.BANK -> Icons.Filled.AccountBalance

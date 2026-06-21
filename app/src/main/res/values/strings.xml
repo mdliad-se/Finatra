@@ -2,4 +2,11 @@
     <string name="app_name">Finatra</string>
     <string name="tagline">Your finances, your way.</string>
     <string name="widget_label">Finatra Balance</string>
+
+    <!-- Bottom navigation (localized; PRD 6.20) -->
+    <string name="nav_home">Home</string>
+    <string name="nav_transactions">Txns</string>
+    <string name="nav_budgets">Budgets</string>
+    <string name="nav_analytics">Analytics</string>
+    <string name="nav_settings">Settings</string>
 </resources>

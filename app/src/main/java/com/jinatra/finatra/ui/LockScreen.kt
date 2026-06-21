@@ -3,6 +3,7 @@ package com.jinatra.finatra.ui
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 
+/** Walks the [ContextWrapper] chain to find the host [FragmentActivity] (required by BiometricPrompt). */
 private fun Context.findActivity(): FragmentActivity? {
     var c = this
     while (c is ContextWrapper) {
@@ -49,15 +51,25 @@ private fun Context.findActivity(): FragmentActivity? {
     return null
 }
 
-/** Full-screen lock gate (PRD 6.11). Biometric first (if enabled), PIN fallback. */
+/**
+ * Full-screen lock gate (PRD 6.11). Prompts biometric first (when [biometricEnabled]) and falls
+ * back to a PIN field (when [hasPin]). Renders a lock icon, headline, optional PIN entry, and an
+ * optional "Use biometric" button.
+ *
+ * @param hasPin whether a PIN is configured (shows the PIN field and gates lockout behaviour).
+ * @param biometricEnabled whether biometric unlock is enabled in settings.
+ * @param onSubmitPin verifies an entered PIN; returns true on success. The caller handles unlocking.
+ * @param onUnlock invoked when biometric authentication succeeds (or to avoid permanent lockout).
+ */
 @Composable
 fun LockScreen(
     hasPin: Boolean,
     biometricEnabled: Boolean,
-    verifyPin: (String) -> Boolean,
+    onSubmitPin: (String) -> Boolean,
     onUnlock: () -> Unit,
 ) {
     val context = LocalContextActivity()
+    // Hoisted PIN entry state and an error flag toggled on an incorrect PIN.
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
 
@@ -65,7 +77,8 @@ fun LockScreen(
         val activity = context ?: return
         if (!biometricEnabled) return
         val manager = BiometricManager.from(activity)
-        if (manager.canAuthenticate(BIOMETRIC_WEAK) != BiometricManager.BIOMETRIC_SUCCESS) {
+        val authenticators = BIOMETRIC_STRONG or BIOMETRIC_WEAK
+        if (manager.canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
             // No usable biometric. If there's no PIN either, don't lock the user out.
             if (!hasPin) onUnlock()
             return
@@ -83,12 +96,13 @@ fun LockScreen(
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Unlock Finatra")
             .setSubtitle("Confirm your identity")
-            .setAllowedAuthenticators(BIOMETRIC_WEAK)
+            .setAllowedAuthenticators(authenticators)
             .setNegativeButtonText(if (hasPin) "Use PIN" else "Cancel")
             .build()
         prompt.authenticate(info)
     }
 
+    // Auto-trigger the biometric prompt once when the lock screen first appears.
     LaunchedEffect(Unit) { promptBiometric() }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -125,7 +139,8 @@ fun LockScreen(
                 if (error) Text("Incorrect PIN", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(12.dp))
                 Button(
-                    onClick = { if (verifyPin(pin)) onUnlock() else { error = true; pin = "" } },
+                    // On a wrong PIN, flag the error and clear the field; success unlocks via the caller.
+                    onClick = { if (!onSubmitPin(pin)) { error = true; pin = "" } },
                     enabled = pin.length in 4..6,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Unlock") }
@@ -143,6 +158,7 @@ fun LockScreen(
     }
 }
 
+/** Resolves the hosting [FragmentActivity] from the composition's local context, or null. */
 @Composable
 private fun LocalContextActivity(): FragmentActivity? =
     androidx.compose.ui.platform.LocalContext.current.findActivity()

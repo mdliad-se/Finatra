@@ -36,16 +36,35 @@ import com.jinatra.finatra.ui.components.FinatraTopBar
 import com.jinatra.finatra.ui.components.LabeledDropdown
 import com.jinatra.finatra.ui.components.SectionHeader
 
+/**
+ * AI configuration screen.
+ *
+ * Two sections:
+ *  - Cloud AI: pick a provider and enter an API key (stored encrypted on-device). A button
+ *    deep-links to the provider's key page.
+ *  - On-device Gemma: shows install status and lets the user import a local `.task` model
+ *    file or download one from a URL (with live progress), or remove the installed model.
+ *    When a local model is present it takes precedence over any cloud provider.
+ *
+ * @param onBack invoked when navigating back.
+ * @param vm screen state/actions; injected via Hilt by default.
+ */
 @Composable
 fun AiSettingsScreen(onBack: () -> Unit, vm: AiSettingsViewModel = hiltViewModel()) {
     val context = LocalContext.current
+    // Resolve the persisted provider back to a full AiProvider; fall back to the first.
     var provider by remember { mutableStateOf(vm.providers.firstOrNull { it.name == vm.savedProvider() } ?: vm.providers.first()) }
     var key by remember { mutableStateOf(vm.savedKey()) }
+    // Drives the transient "Saved ✓" confirmation; reset on any edit.
     var saved by remember { mutableStateOf(false) }
+    // Local mirror of model availability so the UI updates immediately after import/remove.
     var gemmaReady by remember { mutableStateOf(vm.gemmaAvailable()) }
     var modelUrl by remember { mutableStateOf(vm.defaultModelUrl) }
     val dl by vm.download.collectAsStateWithLifecycle()
+    // Re-check availability once a download finishes so the status flips to "installed".
     LaunchedEffect(dl) { if (dl is DownloadState.Done) gemmaReady = vm.gemmaAvailable() }
+    // Storage Access Framework picker for importing a model file; opens its input stream
+    // and hands it to the ViewModel, then reports the result via a Toast.
     val importGemma = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             val ok = runCatching {
@@ -121,6 +140,9 @@ fun AiSettingsScreen(onBack: () -> Unit, vm: AiSettingsViewModel = hiltViewModel
                     shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // Render the download UI based on the current state: determinate or
+                // indeterminate progress while running, an error with retry, a success
+                // note, or the initial download button.
                 when (val d = dl) {
                     is DownloadState.Running -> {
                         Spacer(Modifier.height(8.dp))

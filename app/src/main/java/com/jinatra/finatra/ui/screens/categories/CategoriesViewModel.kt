@@ -10,14 +10,20 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * ViewModel backing [CategoriesScreen]. Exposes the live list of categories and
+ * handles creating custom categories and deleting them via [FinanceRepository].
+ */
 @HiltViewModel
 class CategoriesViewModel @Inject constructor(
     private val repo: FinanceRepository,
 ) : ViewModel() {
 
+    /** Live stream of all categories, surfaced as state for the UI. */
     val categories = repo.observeCategories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Creates a new custom category; ignored when [name] is blank. */
     fun add(name: String, isIncome: Boolean, colorHex: Long) {
         if (name.isBlank()) return
         viewModelScope.launch {
@@ -27,5 +33,6 @@ class CategoriesViewModel @Inject constructor(
         }
     }
 
+    /** Deletes the given category. */
     fun delete(c: CategoryEntity) { viewModelScope.launch { repo.deleteCategory(c) } }
 }

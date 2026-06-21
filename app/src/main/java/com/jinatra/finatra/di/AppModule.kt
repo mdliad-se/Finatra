@@ -12,10 +12,15 @@ import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
+/**
+ * Hilt module providing application-wide singletons: the Room database, application
+ * [Context], the shared OkHttp client, and the AI endpoint configuration.
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
+    /** Builds the Room database "finatra.db" with all registered schema migrations applied. */
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FinatraDatabase =
@@ -23,10 +28,12 @@ object AppModule {
             .addMigrations(*com.jinatra.finatra.data.local.ALL_MIGRATIONS)
             .build()
 
+    /** Exposes the application [Context] for injection where a context is needed. */
     @Provides
     @Singleton
     fun provideContext(@ApplicationContext context: Context): Context = context
 
+    /** Shared OkHttp client used for AI calls, with connect/read timeouts tuned for model latency. */
     @Provides
     @Singleton
     fun provideHttpClient(): OkHttpClient = OkHttpClient.Builder()
@@ -34,6 +41,7 @@ object AppModule {
         .readTimeout(40, TimeUnit.SECONDS)
         .build()
 
+    /** Provides the AI endpoint configuration. */
     @Provides
     @Singleton
     fun provideAiEndpoints(): com.jinatra.finatra.data.ai.AiEndpoints =

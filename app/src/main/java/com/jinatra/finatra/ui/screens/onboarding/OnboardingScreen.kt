@@ -28,28 +28,48 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.jinatra.finatra.data.local.entity.AccountType
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import com.jinatra.finatra.ui.components.ColorPickerRow
 import com.jinatra.finatra.ui.components.ExpressiveCard
 import com.jinatra.finatra.ui.components.LabeledDropdown
 import com.jinatra.finatra.ui.components.OverlineLabel
 import com.jinatra.finatra.util.COMMON_CURRENCIES
 
+/**
+ * First-run onboarding screen. Collects the user's name, base currency, first account
+ * (name, type, opening balance, color), and optional app PIN and AI provider/key. Both
+ * "Get started" and "Skip for now" call the same [finish] handler — skipping simply leaves
+ * fields at their defaults — which persists the setup via [OnboardingViewModel] and then
+ * invokes [onDone] to leave onboarding.
+ */
 @Composable
 fun OnboardingScreen(
     onDone: () -> Unit,
     vm: OnboardingViewModel = hiltViewModel(),
 ) {
+    var userName by remember { mutableStateOf("") }
     var currency by remember { mutableStateOf("USD") }
     var accountName by remember { mutableStateOf("Cash") }
     var accountType by remember { mutableStateOf(AccountType.CASH) }
     var balanceText by remember { mutableStateOf("") }
-    var color by remember { mutableLongStateOf(0xFF0A756C) }
+    var color by remember { mutableLongStateOf(0xFFE05454) }
     var pin by remember { mutableStateOf("") }
     var aiProvider by remember { mutableStateOf("Gemini") }
     var aiApiKey by remember { mutableStateOf("") }
 
+    // Single submit path shared by both the primary and "skip" buttons; unset fields fall
+    // back to their defaults and the ViewModel decides what is actually persisted.
     val finish = {
         vm.finish(
+            userName = userName,
             baseCurrency = currency,
             accountName = accountName,
             accountType = accountType,
@@ -71,18 +91,47 @@ fun OnboardingScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Spacer(Modifier.height(24.dp))
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(if (isSystemInDarkTheme()) Color(0xFF222222) else Color(0xFFFFEACF)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(id = com.jinatra.finatra.R.drawable.ic_launcher_foreground),
+                contentDescription = "Finatra Logo",
+                tint = Color.Unspecified,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Spacer(Modifier.height(8.dp))
         Text(
             "Finatra",
             style = MaterialTheme.typography.displayLarge,
-            fontWeight = FontWeight.Bold,
+            fontFamily = com.jinatra.finatra.ui.theme.NeganFont,
             color = MaterialTheme.colorScheme.primary,
         )
         Text("Your finances, your way.", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            "All data stays on this device. No cloud, no tracking. Let's set up your base currency and first account.",
+            "All data stays on this device. No cloud, no tracking. Let's set up your profile and first account.",
             style = MaterialTheme.typography.bodyMedium,
         )
+
+        ExpressiveCard(modifier = Modifier.fillMaxWidth()) {
+            OverlineLabel("Your profile")
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = userName,
+                onValueChange = { userName = it },
+                label = { Text("Your name") },
+                placeholder = { Text("e.g. Alex") },
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
 
         ExpressiveCard(modifier = Modifier.fillMaxWidth()) {
             OverlineLabel("Base currency")
@@ -176,6 +225,7 @@ fun OnboardingScreen(
     }
 }
 
+/** Human-readable label for each account type, used in dropdowns and account cards. */
 fun AccountType.label(): String = when (this) {
     AccountType.CASH -> "Cash"
     AccountType.BANK -> "Bank Account"

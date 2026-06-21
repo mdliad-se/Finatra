@@ -21,14 +21,20 @@ import com.jinatra.finatra.ui.navigation.Routes
 import com.jinatra.finatra.ui.navigation.TopDestination
 import com.jinatra.finatra.ui.screens.accounts.AccountsScreen
 import com.jinatra.finatra.ui.screens.accounts.AddAccountScreen
+import com.jinatra.finatra.ui.screens.achievements.AchievementsScreen
 import com.jinatra.finatra.ui.screens.addtransaction.AddTransactionScreen
+import com.jinatra.finatra.ui.screens.aicoach.AICoachScreen
 import com.jinatra.finatra.ui.screens.analytics.AnalyticsScreen
 import com.jinatra.finatra.ui.screens.audit.AuditLogScreen
+import com.jinatra.finatra.ui.screens.calendar.CalendarScreen
 import com.jinatra.finatra.ui.screens.budgets.AddBudgetScreen
+import com.jinatra.finatra.ui.screens.budgets.BudgetChatScreen
 import com.jinatra.finatra.ui.screens.budgets.BudgetsScreen
 import com.jinatra.finatra.ui.screens.categories.CategoriesScreen
+import com.jinatra.finatra.ui.screens.goals.GoalsScreen
 import com.jinatra.finatra.ui.screens.home.HomeScreen
 import com.jinatra.finatra.ui.screens.onboarding.OnboardingScreen
+import com.jinatra.finatra.ui.screens.onboarding.QuizScreen
 import com.jinatra.finatra.ui.screens.recurring.RecurringScreen
 import com.jinatra.finatra.ui.screens.settings.AiSettingsScreen
 import com.jinatra.finatra.ui.screens.settings.BackupScreen
@@ -36,11 +42,23 @@ import com.jinatra.finatra.ui.screens.settings.SecurityScreen
 import com.jinatra.finatra.ui.screens.settings.SettingsScreen
 import com.jinatra.finatra.ui.screens.transactions.TransactionsScreen
 
+/**
+ * Top-level UI host: owns the [NavHost] and the bottom [NavigationBar].
+ *
+ * The start destination is chosen from the persisted flags [onboardingDone] and [quizDone],
+ * routing first-run users through onboarding then the quiz before landing on Home. Renders the
+ * whole screen graph (top-level tabs plus pushed detail/editor screens).
+ *
+ * @param onboardingDone whether the user has completed onboarding.
+ * @param quizDone whether the user has completed the setup quiz.
+ */
 @Composable
-fun FinatraRoot(onboardingDone: Boolean) {
+fun FinatraRoot(onboardingDone: Boolean, quizDone: Boolean) {
     val navController = rememberNavController()
+    // Observe the current back-stack entry so the bottom bar can reflect the active route.
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    // Show the bottom bar only on the five top-level tab destinations, not on pushed screens.
     val showBottomBar = TopDestination.entries.any { it.route == currentRoute }
 
     Scaffold(
@@ -54,16 +72,18 @@ fun FinatraRoot(onboardingDone: Boolean) {
                         NavigationBarItem(
                             selected = currentRoute == dest.route,
                             onClick = {
+                                // Single-top tab switch: pop back to Home saving state, and restore
+                                // the target tab's previous state instead of rebuilding it.
                                 navController.navigate(dest.route) {
                                     popUpTo(Routes.HOME) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
                             },
-                            icon = { Icon(dest.icon, contentDescription = dest.label) },
+                            icon = { Icon(dest.icon, contentDescription = androidx.compose.ui.res.stringResource(dest.labelRes)) },
                             label = {
                                 Text(
-                                    dest.label,
+                                    androidx.compose.ui.res.stringResource(dest.labelRes),
                                     maxLines = 1,
                                     softWrap = false,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -85,13 +105,26 @@ fun FinatraRoot(onboardingDone: Boolean) {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = if (onboardingDone) Routes.HOME else Routes.ONBOARDING,
+            // First run flows through onboarding → quiz; returning users start on Home.
+            startDestination = when {
+                !onboardingDone -> Routes.ONBOARDING
+                !quizDone -> Routes.QUIZ
+                else -> Routes.HOME
+            },
             modifier = Modifier.padding(padding),
         ) {
             composable(Routes.ONBOARDING) {
+                // Advance to the quiz, removing onboarding from the back stack so Back can't return.
                 OnboardingScreen(onDone = {
-                    navController.navigate(Routes.HOME) {
+                    navController.navigate(Routes.QUIZ) {
                         popUpTo(Routes.ONBOARDING) { inclusive = true }
+                    }
+                })
+            }
+            composable(Routes.QUIZ) {
+                QuizScreen(onDone = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.QUIZ) { inclusive = true }
                     }
                 })
             }
@@ -103,6 +136,17 @@ fun FinatraRoot(onboardingDone: Boolean) {
                     onOpenTransaction = { id -> navController.navigate("${Routes.ADD_TRANSACTION}?txId=$id") },
                     onAddForAccount = { accId, type ->
                         navController.navigate("${Routes.ADD_TRANSACTION}?accountId=$accId&type=$type")
+                    },
+                    onOpenAiCoach = { navController.navigate(Routes.AI_COACH) },
+                    onOpenGoals = { navController.navigate(Routes.GOALS) },
+                    onOpenCalendar = { navController.navigate(Routes.CALENDAR) },
+                    onOpenAchievements = { navController.navigate(Routes.ACHIEVEMENTS) },
+                    onOpenBudgets = {
+                        navController.navigate(Routes.BUDGETS) {
+                            popUpTo(Routes.HOME) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     },
                 )
             }
@@ -116,6 +160,7 @@ fun FinatraRoot(onboardingDone: Boolean) {
                 BudgetsScreen(
                     onAdd = { navController.navigate(Routes.ADD_BUDGET) },
                     onEdit = { id -> navController.navigate("${Routes.ADD_BUDGET}?budgetId=$id") },
+                    onAiSuggest = { navController.navigate(Routes.BUDGET_CHAT) },
                 )
             }
             composable(Routes.ANALYTICS) { AnalyticsScreen() }
@@ -131,6 +176,8 @@ fun FinatraRoot(onboardingDone: Boolean) {
                 )
             }
 
+            // Add/Edit transaction. Optional args prefill the editor: txId for editing an existing
+            // row, accountId/type to pre-pick the account and transaction type when adding.
             composable(
                 "${Routes.ADD_TRANSACTION}?txId={txId}&accountId={accountId}&type={type}",
                 arguments = listOf(
@@ -159,6 +206,21 @@ fun FinatraRoot(onboardingDone: Boolean) {
 
             composable(Routes.CATEGORIES) { CategoriesScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.RECURRING) { RecurringScreen(onBack = { navController.popBackStack() }) }
+            composable(Routes.GOALS) { GoalsScreen(onBack = { navController.popBackStack() }) }
+            composable(Routes.AI_COACH) { AICoachScreen(onBack = { navController.popBackStack() }) }
+            composable(Routes.BUDGET_CHAT) {
+                BudgetChatScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenAiSettings = { navController.navigate(Routes.AI_SETTINGS) },
+                )
+            }
+            composable(Routes.CALENDAR) {
+                CalendarScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenTransaction = { id -> navController.navigate("${Routes.ADD_TRANSACTION}?txId=$id") },
+                )
+            }
+            composable(Routes.ACHIEVEMENTS) { AchievementsScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.AI_SETTINGS) { AiSettingsScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.SECURITY) { SecurityScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }

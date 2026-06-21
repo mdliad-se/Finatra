@@ -13,11 +13,20 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * Application entry point and Hilt dependency-injection root.
+ *
+ * On startup it registers the app's notification channels, schedules the recurring
+ * background maintenance work, and seeds the default categories on a background scope
+ * if the database is empty.
+ */
 @HiltAndroidApp
 class FinatraApp : Application() {
 
     @Inject lateinit var repository: FinanceRepository
 
+    // Long-lived IO scope; SupervisorJob keeps startup work isolated so one failure
+    // does not cancel the others.
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
@@ -27,6 +36,7 @@ class FinatraApp : Application() {
         appScope.launch { repository.seedCategoriesIfEmpty() }
     }
 
+    /** Registers the three notification channels (budget, recurring, summaries) at their respective importance levels. */
     private fun createNotificationChannels() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         listOf(
@@ -36,6 +46,7 @@ class FinatraApp : Application() {
         ).forEach(nm::createNotificationChannel)
     }
 
+    /** Stable notification-channel ids referenced when posting notifications. */
     companion object {
         const val CH_BUDGET = "budget_alerts"
         const val CH_RECURRING = "recurring_reminders"

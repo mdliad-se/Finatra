@@ -40,6 +40,13 @@ import com.jinatra.finatra.ui.components.IconChip
 import com.jinatra.finatra.ui.theme.FinatraTheme
 import com.jinatra.finatra.util.CategoryIcons
 
+/**
+ * Categories management screen. Lists every category with its icon, color, and
+ * income/expense flag, lets the user delete custom categories, and exposes a FAB
+ * that opens a dialog for creating a new one (name, type, and color).
+ *
+ * @param onBack invoked when the top bar's back affordance is tapped.
+ */
 @Composable
 fun CategoriesScreen(onBack: () -> Unit, vm: CategoriesViewModel = hiltViewModel()) {
     val cats by vm.categories.collectAsStateWithLifecycle()
@@ -74,6 +81,7 @@ fun CategoriesScreen(onBack: () -> Unit, vm: CategoriesViewModel = hiltViewModel
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (c.isIncome) FinatraTheme.income else FinatraTheme.expense)
                         }
+                        // Only user-created categories can be removed; built-in ones are protected.
                         if (c.isCustom) {
                             IconButton(onClick = { vm.delete(c) }) {
                                 Icon(Icons.Filled.Delete, contentDescription = "Delete")
@@ -88,7 +96,7 @@ fun CategoriesScreen(onBack: () -> Unit, vm: CategoriesViewModel = hiltViewModel
     if (showAdd) {
         var name by remember { mutableStateOf("") }
         var income by remember { mutableStateOf(false) }
-        var color by remember { mutableLongStateOf(0xFF0A756C) }
+        var color by remember { mutableLongStateOf(0xFFE05454) }
         AlertDialog(
             onDismissRequest = { showAdd = false },
             title = { Text("New category") },

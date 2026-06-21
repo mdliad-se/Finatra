@@ -20,6 +20,9 @@ private val provider = GoogleFont.Provider(
 private val poppins = GoogleFont("Poppins")
 private val inter = GoogleFont("Inter")
 
+/** Negan — logo/wordmark display font only (PRD §5.2). Bundled OTF in res/font; not used by the M3 scale. */
+val NeganFont = FontFamily(androidx.compose.ui.text.font.Font(R.font.negan))
+
 private val Display = FontFamily(
     Font(googleFont = poppins, fontProvider = provider, weight = FontWeight.SemiBold),
     Font(googleFont = poppins, fontProvider = provider, weight = FontWeight.Bold),
@@ -30,6 +33,10 @@ private val BodyFont = FontFamily(
     Font(googleFont = inter, fontProvider = provider, weight = FontWeight.SemiBold),
 )
 
+/**
+ * Material 3 type scale for the app. Display/headline slots use Poppins (the `Display` family);
+ * titles, body, and labels use Inter (the `BodyFont` family), per PRD §5.5.
+ */
 val FinatraTypography = Typography(
     displayLarge = TextStyle(fontFamily = Display, fontWeight = FontWeight.Bold, fontSize = 48.sp, lineHeight = 56.sp),
     displaySmall = TextStyle(fontFamily = Display, fontWeight = FontWeight.Bold, fontSize = 36.sp, lineHeight = 44.sp),

@@ -38,6 +38,15 @@ import com.jinatra.finatra.ui.screens.onboarding.label
 import com.jinatra.finatra.util.CategoryIcons
 import com.jinatra.finatra.util.Money
 
+/**
+ * Lists the user's financial accounts (cash, bank, card, mobile wallet), each rendered as a
+ * colored card showing its name, type, and live computed balance.
+ *
+ * @param onAdd invoked to create a new account (FAB).
+ * @param onEdit invoked with an account id when a card is tapped, to edit that account.
+ * @param onBack navigates back.
+ * @param vm supplies the observable list of accounts with their running balances.
+ */
 @Composable
 fun AccountsScreen(
     onAdd: () -> Unit,
@@ -74,9 +83,11 @@ fun AccountsScreen(
     }
 }
 
+/** A single tappable account card tinted with the account's chosen color. */
 @Composable
 private fun AccountCard(awb: AccountWithBalance, onClick: () -> Unit) {
     val bg = Color(awb.account.colorHex)
+    // Pick black/white foreground for contrast against the card's background color.
     val onColor = if (bg.luminance() > 0.5f) Color.Black else Color.White
     ExpressiveCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),

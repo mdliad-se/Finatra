@@ -3,18 +3,24 @@ package com.jinatra.finatra.data.repository
 import com.jinatra.finatra.data.local.DefaultCategories
 import com.jinatra.finatra.data.local.FinatraDatabase
 import com.jinatra.finatra.data.local.dao.CategorySpend
+import com.jinatra.finatra.data.local.dao.PayeeSpend
 import com.jinatra.finatra.data.local.dao.TransactionWithDetails
 import com.jinatra.finatra.data.local.entity.AccountEntity
 import com.jinatra.finatra.data.local.entity.AuditLogEntity
 import com.jinatra.finatra.data.local.entity.BudgetEntity
 import com.jinatra.finatra.data.local.entity.CategoryEntity
+import com.jinatra.finatra.data.local.entity.ChatMessageEntity
 import com.jinatra.finatra.data.local.entity.ExchangeRateEntity
+import com.jinatra.finatra.data.local.entity.GoalEntity
 import com.jinatra.finatra.data.local.entity.RecurrenceFrequency
 import com.jinatra.finatra.data.local.entity.RecurringTransactionEntity
 import com.jinatra.finatra.data.local.entity.TransactionEntity
+import com.jinatra.finatra.data.local.entity.TransactionTemplateEntity
 import com.jinatra.finatra.data.local.entity.TransactionType
+import com.jinatra.finatra.data.SessionManager
 import com.jinatra.finatra.util.DateUtil
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,11 +46,13 @@ data class AccountCard(
     val categorySpend: List<CategorySpend>,
 )
 
+// Fixed palette of ARGB colors auto-assigned to categories that have no explicit color.
 private val CategoryPalette = listOf(
     0xFFE57373, 0xFF64B5F6, 0xFF9575CD, 0xFF4DB6AC, 0xFFFFB74D,
     0xFFF06292, 0xFF7986CB, 0xFF4FC3F7, 0xFF81C784, 0xFFFF8A65,
 )
 
+// Deterministic palette pick: same name always maps to the same color (abs() guards negative hashCode).
 private fun colorForName(name: String): Long =
     CategoryPalette[(kotlin.math.abs(name.hashCode())) % CategoryPalette.size]
 
@@ -57,8 +65,47 @@ data class MonthPoint(
     val netWorthEnd: Double,
 )
 
+/** End-of-month projection from the current spending/earning rate (PRD 6.9 monthly forecast). */
+data class MonthlyForecast(
+    val projectedIncome: Double,
+    val projectedExpense: Double,
+    val projectedEndBalance: Double,
+    val daysElapsed: Int,
+    val daysInMonth: Int,
+) {
+    val projectedSavings: Double get() = projectedIncome - projectedExpense
+}
+
+/** Financial health score 1–100 with its component breakdown (PRD 6.16). */
+data class HealthScore(
+    val score: Int,
+    val savingsRate: Double,     // 0..1 fraction of income saved this month
+    val budgetAdherence: Double, // 0..1 (1 = no budget overspent)
+) {
+    /** Color band per PRD: red <40, amber 40–70, green >70. */
+    val status: String get() = when {
+        score >= 71 -> "Healthy"
+        score >= 40 -> "Fair"
+        else -> "Needs attention"
+    }
+}
+
+/**
+ * Central repository over the Room database for all financial data: accounts, categories,
+ * transactions, budgets, recurring items, goals, exchange rates, audit log and AI chat history.
+ *
+ * It also computes derived figures (net worth, monthly series, forecasts, health score) and applies
+ * multi-currency conversion via stored manual rates ([convert]).
+ *
+ * Decoy mode (PRD 6.13): when [SessionManager] reports decoy, reads return empty/zero values (see
+ * [gated]) and writes are silently skipped, so the alternate PIN reveals a clean, empty app without
+ * touching real data.
+ */
 @Singleton
-class FinanceRepository @Inject constructor(private val db: FinatraDatabase) {
+class FinanceRepository @Inject constructor(
+    private val db: FinatraDatabase,
+    private val session: SessionManager,
+) {
 
     private val accounts = db.accountDao()
     private val categories = db.categoryDao()
@@ -67,15 +114,22 @@ class FinanceRepository @Inject constructor(private val db: FinatraDatabase) {
     private val recurring = db.recurringDao()
     private val audit = db.auditDao()
     private val rates = db.exchangeRateDao()
+    private val goals = db.goalDao()
+    private val chat = db.chatDao()
+    private val templates = db.templateDao()
+
+    /** Gate a flow behind decoy mode (PRD 6.13): emit [empty] instead of real data when decoy is on. */
+    private fun <T> gated(flow: Flow<T>, empty: T): Flow<T> =
+        combine(flow, session.decoy) { v, d -> if (d) empty else v }
 
     // --- Accounts ---
-    fun observeAccounts(): Flow<List<AccountEntity>> = accounts.observeAll()
-    fun observeAccount(id: Long) = accounts.observeById(id)
-    fun observeBalance(accountId: Long) = accounts.observeBalance(accountId)
-    fun observeTotalOpening() = accounts.observeTotalOpening()
-    suspend fun upsertAccount(a: AccountEntity) = accounts.upsert(a)
-    suspend fun deleteAccount(a: AccountEntity) = accounts.delete(a)
-    suspend fun accountById(id: Long) = accounts.byId(id)
+    fun observeAccounts(): Flow<List<AccountEntity>> = gated(accounts.observeAll(), emptyList())
+    fun observeAccount(id: Long) = gated(accounts.observeById(id), null)
+    fun observeBalance(accountId: Long) = gated(accounts.observeBalance(accountId), 0.0)
+    fun observeTotalOpening() = gated(accounts.observeTotalOpening(), 0.0)
+    suspend fun upsertAccount(a: AccountEntity) = if (session.isDecoy) -1L else accounts.upsert(a)
+    suspend fun deleteAccount(a: AccountEntity) { if (!session.isDecoy) accounts.delete(a) }
+    suspend fun accountById(id: Long) = if (session.isDecoy) null else accounts.byId(id)
 
     // --- Categories ---
     fun observeCategories(): Flow<List<CategoryEntity>> = categories.observeAll()
@@ -112,6 +166,7 @@ class FinanceRepository @Inject constructor(private val db: FinatraDatabase) {
 
     /** Average monthly spend per expense category over the last [months] months. */
     suspend fun avgMonthlySpend(months: Int, now: Long = System.currentTimeMillis()): List<CategoryAvgSpend> {
+        if (session.isDecoy) return emptyList()
         val cats = categories.allTopLevel().filter { !it.isIncome }
         val start = DateUtil.startOfMonth(DateUtil.plusMonths(now, -(months - 1)))
         val end = DateUtil.endOfMonth(now)
@@ -122,44 +177,74 @@ class FinanceRepository @Inject constructor(private val db: FinatraDatabase) {
     }
 
     // --- Transactions ---
-    fun observeTransactions(): Flow<List<TransactionWithDetails>> = txns.observeAll()
-    fun observeRecent(limit: Int = 8): Flow<List<TransactionWithDetails>> = txns.observeRecent(limit)
-    fun observeTotalByType(type: String, start: Long, end: Long) = txns.observeTotalByType(type, start, end)
-    fun observeSpendByCategory(start: Long, end: Long): Flow<List<CategorySpend>> = txns.observeSpendByCategory(start, end)
+    fun observeTransactions(): Flow<List<TransactionWithDetails>> = gated(txns.observeAll(), emptyList())
+    fun observeRecent(limit: Int = 8): Flow<List<TransactionWithDetails>> = gated(txns.observeRecent(limit), emptyList())
+    fun observeTotalByType(type: String, start: Long, end: Long) = gated(txns.observeTotalByType(type, start, end), 0.0)
+    fun observeSpendByCategory(start: Long, end: Long): Flow<List<CategorySpend>> = gated(txns.observeSpendByCategory(start, end), emptyList())
 
     suspend fun addTransaction(t: TransactionEntity): Long {
+        if (session.isDecoy) return -1L
         val id = txns.insert(t)
         audit.insert(AuditLogEntity(transactionId = id, action = "CREATED", timestamp = t.createdAt))
         return id
     }
 
     suspend fun updateTransaction(t: TransactionEntity) {
+        if (session.isDecoy) return
         txns.update(t)
         audit.insert(AuditLogEntity(transactionId = t.id, action = "EDITED", timestamp = t.updatedAt))
     }
 
     suspend fun deleteTransaction(t: TransactionEntity, at: Long) {
+        if (session.isDecoy) return
         audit.insert(AuditLogEntity(transactionId = t.id, action = "DELETED", details = t.note, timestamp = at))
         txns.delete(t)
     }
 
-    suspend fun transactionById(id: Long) = txns.byId(id)
+    suspend fun transactionById(id: Long) = if (session.isDecoy) null else txns.byId(id)
+
+    /** Save one expense split across several categories as linked parts (PRD 6.4). */
+    suspend fun addSplit(parts: List<TransactionEntity>): Boolean {
+        if (session.isDecoy || parts.isEmpty()) return false
+        val groupId = parts.first().createdAt
+        parts.forEach { addTransaction(it.copy(splitGroupId = groupId)) }
+        return true
+    }
+
+    /** A recent transaction matching amount+account+type within [withinHours] — a likely duplicate (PRD 6.4). */
+    suspend fun findPossibleDuplicate(
+        type: TransactionType, accountId: Long, amount: Double, withinHours: Int = 36,
+        now: Long = System.currentTimeMillis(),
+    ): TransactionEntity? {
+        if (session.isDecoy) return null
+        // 3_600_000 ms = 1 hour; look back [withinHours] for a same type/account/amount entry.
+        return txns.matchingSince(type.name, accountId, amount, now - withinHours * 3_600_000L)
+    }
+
+    // --- Transaction templates (PRD 6.4) ---
+    fun observeTemplates(): Flow<List<TransactionTemplateEntity>> = gated(templates.observeAll(), emptyList())
+    suspend fun upsertTemplate(t: TransactionTemplateEntity) = if (session.isDecoy) -1L else templates.upsert(t)
+    suspend fun deleteTemplate(t: TransactionTemplateEntity) { if (!session.isDecoy) templates.delete(t) }
+
+    /** Top payees/merchants by expense total in a range (PRD 6.8). */
+    suspend fun payeeSpend(start: Long, end: Long, limit: Int = 8): List<PayeeSpend> =
+        if (session.isDecoy) emptyList() else txns.spendByPayee(start, end, limit)
 
     // --- Budgets ---
-    fun observeBudgets(): Flow<List<BudgetEntity>> = budgets.observeAll()
-    suspend fun upsertBudget(b: BudgetEntity) = budgets.upsert(b)
-    suspend fun deleteBudget(b: BudgetEntity) = budgets.delete(b)
+    fun observeBudgets(): Flow<List<BudgetEntity>> = gated(budgets.observeAll(), emptyList())
+    suspend fun upsertBudget(b: BudgetEntity) = if (session.isDecoy) -1L else budgets.upsert(b)
+    suspend fun deleteBudget(b: BudgetEntity) { if (!session.isDecoy) budgets.delete(b) }
     suspend fun spentInCategory(categoryId: Long, start: Long, end: Long) =
-        txns.spentInCategory(categoryId, start, end)
+        if (session.isDecoy) 0.0 else txns.spentInCategory(categoryId, start, end)
 
     // --- Recurring ---
-    fun observeRecurring(): Flow<List<RecurringTransactionEntity>> = recurring.observeAll()
-    suspend fun upsertRecurring(r: RecurringTransactionEntity) = recurring.upsert(r)
-    suspend fun deleteRecurring(r: RecurringTransactionEntity) = recurring.delete(r)
+    fun observeRecurring(): Flow<List<RecurringTransactionEntity>> = gated(recurring.observeAll(), emptyList())
+    suspend fun upsertRecurring(r: RecurringTransactionEntity) = if (session.isDecoy) -1L else recurring.upsert(r)
+    suspend fun deleteRecurring(r: RecurringTransactionEntity) { if (!session.isDecoy) recurring.delete(r) }
     suspend fun dueRecurring(now: Long) = recurring.due(now)
 
     // --- Audit ---
-    fun observeAudit() = audit.observeRecent()
+    fun observeAudit() = gated(audit.observeRecent(), emptyList())
     fun observeAuditFor(txId: Long) = audit.observeForTx(txId)
 
     // --- Exchange rates / multi-currency ---
@@ -175,11 +260,12 @@ class FinanceRepository @Inject constructor(private val db: FinatraDatabase) {
     }
 
     // --- One-shot aggregates / conversions (dashboard + workers) ---
-    suspend fun accountBalance(id: Long): Double = accounts.balance(id) ?: 0.0
+    suspend fun accountBalance(id: Long): Double = if (session.isDecoy) 0.0 else accounts.balance(id) ?: 0.0
 
     /** Per-account cards for the Home carousel: balance + this-month flows + expense breakdown. */
-    suspend fun accountCards(start: Long, end: Long): List<AccountCard> =
-        accounts.observeAll().first().map { a ->
+    suspend fun accountCards(start: Long, end: Long): List<AccountCard> {
+        if (session.isDecoy) return emptyList()
+        return accounts.observeAll().first().map { a ->
             AccountCard(
                 account = a,
                 balance = accountBalance(a.id),
@@ -188,18 +274,25 @@ class FinanceRepository @Inject constructor(private val db: FinatraDatabase) {
                 categorySpend = txns.spendByCategoryForAccount(a.id, start, end),
             )
         }
-    suspend fun totalByType(type: String, start: Long, end: Long): Double = txns.totalByType(type, start, end)
+    }
+    suspend fun totalByType(type: String, start: Long, end: Long): Double =
+        if (session.isDecoy) 0.0 else txns.totalByType(type, start, end)
 
     /** Net worth across all accounts, each balance converted to [base]. */
-    suspend fun convertedNetWorth(base: String): Double =
-        accounts.observeAll().first().sumOf { a -> convert(accountBalance(a.id), a.currency, base) }
+    suspend fun convertedNetWorth(base: String): Double {
+        if (session.isDecoy) return 0.0
+        return accounts.observeAll().first().sumOf { a -> convert(accountBalance(a.id), a.currency, base) }
+    }
 
     /** Sum of a transaction type in a range, each currency bucket converted to [base]. */
-    suspend fun convertedTotalByType(type: String, start: Long, end: Long, base: String): Double =
-        txns.totalsByCurrency(type, start, end).sumOf { convert(it.total, it.currency, base) }
+    suspend fun convertedTotalByType(type: String, start: Long, end: Long, base: String): Double {
+        if (session.isDecoy) return 0.0
+        return txns.totalsByCurrency(type, start, end).sumOf { convert(it.total, it.currency, base) }
+    }
 
     /** Budgets currently over their limit (this month for MONTHLY, else their window). */
     suspend fun overspentBudgets(now: Long = System.currentTimeMillis()): List<BudgetAlert> {
+        if (session.isDecoy) return emptyList()
         val cats = categories.observeAll().first()
         return budgets.observeAll().first().mapNotNull { b ->
             val (start, end) = if (b.period == com.jinatra.finatra.data.local.entity.BudgetPeriod.MONTHLY)
@@ -215,7 +308,7 @@ class FinanceRepository @Inject constructor(private val db: FinatraDatabase) {
 
     /** Active accounts whose live balance is below their configured threshold. */
     suspend fun accountsBelowThreshold(): List<Pair<AccountEntity, Double>> =
-        accounts.observeAll().first()
+        if (session.isDecoy) emptyList() else accounts.observeAll().first()
             .filter { it.lowBalanceThreshold > 0.0 }
             .mapNotNull { a ->
                 val bal = accountBalance(a.id)
@@ -270,6 +363,65 @@ class FinanceRepository @Inject constructor(private val db: FinatraDatabase) {
         return buckets.mapIndexed { i, b -> MonthPoint(b.start, b.label, b.income, b.expense, nets[i]) }
     }
 
+    // --- Goals / debt tracker (PRD 6.9) ---
+    fun observeGoals(): Flow<List<GoalEntity>> = gated(goals.observeAll(), emptyList())
+    suspend fun upsertGoal(g: GoalEntity) = if (session.isDecoy) -1L else goals.upsert(g)
+    suspend fun deleteGoal(g: GoalEntity) { if (!session.isDecoy) goals.delete(g) }
+    suspend fun goalById(id: Long) = if (session.isDecoy) null else goals.byId(id)
+    suspend fun goalCount() = goals.count()
+
+    // --- AI Coach chat history (PRD 6.11) ---
+    fun observeChat(): Flow<List<ChatMessageEntity>> = gated(chat.observeAll(), emptyList())
+    suspend fun addChatMessage(role: String, content: String, at: Long = System.currentTimeMillis()) =
+        if (session.isDecoy) -1L else chat.insert(ChatMessageEntity(role = role, content = content, timestamp = at))
+    suspend fun clearChat() { if (!session.isDecoy) chat.clear() }
+
+    /** Financial health score (PRD 6.16): savings rate + budget adherence, base currency. */
+    suspend fun financeHealth(base: String, now: Long = System.currentTimeMillis()): HealthScore {
+        if (session.isDecoy) return HealthScore(0, 0.0, 0.0)
+        val start = DateUtil.startOfMonth(now)
+        val end = DateUtil.endOfMonth(now)
+        val income = convertedTotalByType(TransactionType.INCOME.name, start, end, base)
+        val expense = convertedTotalByType(TransactionType.EXPENSE.name, start, end, base)
+        val savingsRate = if (income > 0) ((income - expense) / income).coerceIn(0.0, 1.0) else 0.0
+
+        val allBudgets = budgets.observeAll().first()
+        val adherence = if (allBudgets.isEmpty()) 0.7 else {
+            val over = overspentBudgets(now).size
+            (1.0 - over.toDouble() / allBudgets.size).coerceIn(0.0, 1.0)
+        }
+        val score = (savingsRate * 50 + adherence * 50).toInt().coerceIn(1, 100)
+        return HealthScore(score, savingsRate, adherence)
+    }
+
+    /** Project end-of-month income/expense/balance by extrapolating the month-to-date rate (PRD 6.9). */
+    suspend fun monthlyForecast(base: String, now: Long = System.currentTimeMillis()): MonthlyForecast {
+        val start = DateUtil.startOfMonth(now)
+        val end = DateUtil.endOfMonth(now)
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
+        val daysInMonth = cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+        val daysElapsed = cal.get(java.util.Calendar.DAY_OF_MONTH).coerceAtLeast(1)
+        if (session.isDecoy) return MonthlyForecast(0.0, 0.0, 0.0, daysElapsed, daysInMonth)
+
+        val incomeSoFar = convertedTotalByType(TransactionType.INCOME.name, start, end, base)
+        val expenseSoFar = convertedTotalByType(TransactionType.EXPENSE.name, start, end, base)
+        val factor = daysInMonth.toDouble() / daysElapsed
+        val projIncome = incomeSoFar * factor
+        val projExpense = expenseSoFar * factor
+        val netWorth = convertedNetWorth(base)
+        // Net worth already reflects month-to-date flows; add only the remaining projected delta.
+        val remaining = (projIncome - incomeSoFar) - (projExpense - expenseSoFar)
+        return MonthlyForecast(projIncome, projExpense, netWorth + remaining, daysElapsed, daysInMonth)
+    }
+
+    /** Distinct start-of-day epochs that have at least one transaction (PRD 6.15 calendar dots). */
+    suspend fun transactionDays(start: Long, end: Long): Set<Long> =
+        if (session.isDecoy) emptySet() else txns.observeAll().first()
+            .filter { it.dateTime in start..end }
+            .map { DateUtil.startOfDay(it.dateTime) }
+            .toSet()
+
+    /** Next run time after [from] for the given [freq]; CUSTOM steps by [intervalDays] (min 1 day). */
     private fun advance(from: Long, freq: RecurrenceFrequency, intervalDays: Int): Long = when (freq) {
         RecurrenceFrequency.DAILY -> DateUtil.plusDays(from, 1)
         RecurrenceFrequency.WEEKLY -> DateUtil.plusDays(from, 7)

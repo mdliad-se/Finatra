@@ -37,6 +37,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/**
+ * Standard screen top app bar in brand colors. Shows a back arrow only when [onBack] is provided,
+ * so top-level tabs can omit it while pushed detail screens get a navigate-up button.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FinatraTopBar(title: String, onBack: (() -> Unit)? = null) {
@@ -56,6 +60,7 @@ fun FinatraTopBar(title: String, onBack: (() -> Unit)? = null) {
     )
 }
 
+/** Section title within a screen — title-medium weight in the brand primary color. */
 @Composable
 fun SectionHeader(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -184,6 +189,7 @@ fun SegmentedToggle(
     }
 }
 
+/** Centered placeholder shown when a list/screen has no content, displaying [message]. */
 @Composable
 fun EmptyState(message: String, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {

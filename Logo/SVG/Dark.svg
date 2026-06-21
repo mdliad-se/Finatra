@@ -1,26 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 515.44">
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <style>
       .cls-1 {
+        fill: #222;
+      }
+
+      .cls-2 {
         font-family: NeganDEMO-Regular, 'Negan DEMO';
-        font-size: 428px;
+        font-size: 337.88px;
       }
 
-      .cls-1, .cls-2 {
-        fill: #ffeacf;
-      }
-
-      .cls-3 {
-        fill: #0a756c;
+      .cls-2, .cls-3 {
+        fill: #e05454;
       }
     </style>
   </defs>
   <g id="Layer_1-2" data-name="Layer 1">
-    <rect class="cls-3" width="512" height="512"/>
+    <rect class="cls-1" width="512" height="512"/>
     <g>
-      <text class="cls-1" transform="translate(100.23 399.88)"><tspan x="0" y="0">F</tspan></text>
-      <circle class="cls-2" cx="376.94" cy="93.76" r="34.82"/>
+      <text class="cls-2" transform="translate(153.88 387.84)"><tspan x="0" y="0">F</tspan></text>
+      <circle class="cls-3" cx="372.33" cy="146.18" r="27.49"/>
     </g>
   </g>
 </svg>

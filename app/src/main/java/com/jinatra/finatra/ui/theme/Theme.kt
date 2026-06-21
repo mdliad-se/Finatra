@@ -113,6 +113,14 @@ object FinatraTheme {
         @Composable get() = LocalFinatraColors.current.expense
 }
 
+/**
+ * App-wide Material 3 theme wrapper. Selects the light/dark [MaterialTheme] color scheme, installs
+ * the brand [FinatraTypography] and [FinatraShapes], provides [LocalFinatraColors] (income/expense),
+ * and syncs the system status/navigation bars to the background color.
+ *
+ * @param darkTheme defaults to the system setting.
+ * @param dynamicColor opt-in Android 12+ wallpaper colors; off by default to preserve brand identity.
+ */
 @Composable
 fun FinatraTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -129,6 +137,7 @@ fun FinatraTheme(
     }
     val extra = if (darkTheme) DarkExtra else LightExtra
 
+    // Tint the system bars to match the app background (skipped in @Preview/edit mode).
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {

@@ -20,6 +20,11 @@ import com.jinatra.finatra.ui.components.ExpressiveCard
 import com.jinatra.finatra.ui.components.FinatraTopBar
 import com.jinatra.finatra.util.DateUtil
 
+/**
+ * Read-only audit trail screen. Lists recorded transaction history events (action, affected
+ * transaction id, timestamp and optional details) newest-first, or an empty state when none
+ * exist. [onBack] navigates up.
+ */
 @Composable
 fun AuditLogScreen(onBack: () -> Unit, vm: AuditLogViewModel = hiltViewModel()) {
     val entries by vm.entries.collectAsStateWithLifecycle()

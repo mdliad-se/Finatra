@@ -11,6 +11,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * ViewModel for the main Settings screen.
+ *
+ * Exposes the persisted [UserSettings] as reactive [settings] state and provides one setter
+ * per user-toggleable preference (appearance, locale, notifications, screenshot blocking).
+ * Each setter delegates to [SettingsRepository] on the view-model scope; security PINs and
+ * data backup live on dedicated sub-screens, not here.
+ */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
@@ -21,6 +29,7 @@ class SettingsViewModel @Inject constructor(
     fun setTheme(mode: ThemeMode) = viewModelScope.launch { repo.setThemeMode(mode) }
     fun setDynamic(on: Boolean) = viewModelScope.launch { repo.setDynamicColor(on) }
     fun setCurrency(code: String) = viewModelScope.launch { repo.setBaseCurrency(code) }
+    fun setLanguage(code: String) = viewModelScope.launch { repo.setLanguage(code) }
     fun setScreenshotPrevention(on: Boolean) = viewModelScope.launch { repo.setScreenshotPrevention(on) }
     fun setNotifBudget(on: Boolean) = viewModelScope.launch { repo.setNotifBudget(on) }
     fun setNotifRecurring(on: Boolean) = viewModelScope.launch { repo.setNotifRecurring(on) }

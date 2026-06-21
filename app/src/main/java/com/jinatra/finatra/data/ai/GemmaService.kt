@@ -27,9 +27,14 @@ class GemmaService @Inject constructor(
     private val client: OkHttpClient,
 ) {
     private val modelFile: File get() = File(context.filesDir, "models/gemma.task")
+    // Lazily-created inference engine; reset to null whenever the model file changes
+    // (import/download/delete) so the next generate() reloads the new weights.
     private var engine: LlmInference? = null
 
+    /** Absolute path of the on-device model file (whether or not it currently exists). */
     fun modelPath(): String = modelFile.absolutePath
+
+    /** True when a non-empty model file is present, i.e. on-device inference is usable. */
     fun isAvailable(): Boolean = modelFile.exists() && modelFile.length() > 0
 
     /** Copy a user-selected model file into app-private storage. */
@@ -78,11 +83,17 @@ class GemmaService @Inject constructor(
         }
     }
 
+    /** Remove the on-device model, closing the live engine first so the file is unlocked. */
     fun deleteModel() {
         engine?.close(); engine = null
         runCatching { modelFile.delete() }
     }
 
+    /**
+     * Run a single-turn local inference for [prompt], returning the model's text or null.
+     * Returns null when no model is present; lazily builds (and caches) the engine on first use.
+     * Runs on the IO dispatcher and swallows inference errors.
+     */
     suspend fun generate(prompt: String): String? = withContext(Dispatchers.IO) {
         if (!isAvailable()) return@withContext null
         runCatching {

@@ -17,16 +17,33 @@ import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
 
+/**
+ * ViewModel for the Backup & data screen.
+ *
+ * Provides fully on-device (no network) data portability:
+ *  - CSV export of all transactions and a blank import template.
+ *  - A versioned JSON backup of accounts + transactions.
+ *  - CSV import and JSON restore, which reconcile rows against existing accounts/categories.
+ *
+ * Heavy work (DB reads, parsing, writes) runs on [Dispatchers.IO]; completion callbacks
+ * are marshalled back to the main thread for the caller's UI feedback.
+ */
 @HiltViewModel
 class BackupViewModel @Inject constructor(
     private val repo: FinanceRepository,
 ) : ViewModel() {
+
+    /** Blank import template: header + one example row (PRD 6.18). */
+    fun csvTemplate(): String =
+        "date,type,amount,currency,category,account,note,tags\n" +
+            "\"1 Jan 2026, 9:00 AM\",\"EXPENSE\",\"500\",\"BDT\",\"Food\",\"Cash\",\"Lunch\",\"work\"\n"
 
     /** CSV of all transactions (PRD 6.12). */
     suspend fun buildTransactionsCsv(): String = withContext(Dispatchers.IO) {
         val rows = repo.observeTransactions().first()
         val sb = StringBuilder("date,type,amount,currency,category,account,note,tags\n")
         rows.forEach { t ->
+            // Each field is double-quoted and embedded quotes are doubled ("" ) per RFC 4180.
             sb.append(
                 listOf(
                     DateUtil.full(t.dateTime), t.type, t.amount.toString(), t.currency,
@@ -42,6 +59,7 @@ class BackupViewModel @Inject constructor(
         val accounts = repo.observeAccounts().first()
         val txns = repo.observeTransactions().first()
         val root = JSONObject()
+        // "version" lets restore detect/upgrade older backup formats in future.
         root.put("version", 1)
         root.put("accounts", JSONArray().apply {
             accounts.forEach { a ->
@@ -72,24 +90,27 @@ class BackupViewModel @Inject constructor(
             var skipped = 0
             runCatching {
                 val now = System.currentTimeMillis()
-                val accByName = repo.observeAccounts().first().associateBy { it.name }
-                val catByName = repo.observeCategories().first().associateBy { it.name }
+                val accByName = repo.observeAccounts().first().associateBy { it.name.lowercase() }
                 val lines = text.split("\n").map { it.trimEnd('\r') }.filter { it.isNotBlank() }
                 lines.drop(1).forEach { line ->
                     val f = com.jinatra.finatra.util.CsvUtil.splitLine(line)
                     if (f.size < 6) { skipped++; return@forEach }
-                    val acc = accByName[f[5]]
+                    val acc = accByName[f[5].trim().lowercase()]
                     if (acc == null) { skipped++; return@forEach }
-                    val type = runCatching { TransactionType.valueOf(f[1].trim()) }.getOrDefault(TransactionType.EXPENSE)
+                    val type = runCatching { TransactionType.valueOf(f[1].trim().uppercase()) }.getOrDefault(TransactionType.EXPENSE)
                     val amount = f[2].trim().toDoubleOrNull() ?: run { skipped++; return@forEach }
                     val dateTime = DateUtil.parseFull(f[0]) ?: now
+                    // Resolve category by name, creating it if new (unless transfer).
+                    val catName = f.getOrElse(4) { "" }.trim()
+                    val categoryId = if (catName.isNotBlank() && type != TransactionType.TRANSFER)
+                        repo.findOrCreateCategory(catName, type == TransactionType.INCOME).takeIf { it > 0 } else null
                     repo.addTransaction(
                         TransactionEntity(
                             type = type,
                             amount = amount,
                             currency = f.getOrElse(3) { acc.currency }.ifBlank { acc.currency },
                             dateTime = dateTime,
-                            categoryId = catByName[f.getOrElse(4) { "" }]?.id,
+                            categoryId = categoryId,
                             accountId = acc.id,
                             note = f.getOrElse(6) { "" },
                             tags = f.getOrElse(7) { "" },
@@ -103,12 +124,21 @@ class BackupViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Restores accounts and transactions from a JSON backup produced by [buildBackupJson].
+     *
+     * Accounts are upserted first and their generated ids tracked by name; transactions are
+     * then re-linked to those ids by account name. Transactions referencing an unknown
+     * account are skipped. The whole operation is best-effort: any parse/DB failure yields
+     * `onDone(false)`.
+     */
     fun restoreFromJson(text: String, onDone: (Boolean) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             val ok = runCatching {
                 val root = JSONObject(text)
                 val now = System.currentTimeMillis()
                 val accArr = root.optJSONArray("accounts") ?: JSONArray()
+                // Maps each restored account name to its new row id, used to re-link transactions.
                 val nameToId = mutableMapOf<String, Long>()
                 for (i in 0 until accArr.length()) {
                     val o = accArr.getJSONObject(i)
@@ -118,7 +148,7 @@ class BackupViewModel @Inject constructor(
                             type = runCatching { AccountType.valueOf(o.getString("type")) }.getOrDefault(AccountType.CASH),
                             currency = o.optString("currency", "USD"),
                             openingBalance = o.optDouble("openingBalance", 0.0),
-                            colorHex = o.optLong("colorHex", 0xFF0A756C),
+                            colorHex = o.optLong("colorHex", 0xFFE05454),
                             createdAt = now,
                         )
                     )

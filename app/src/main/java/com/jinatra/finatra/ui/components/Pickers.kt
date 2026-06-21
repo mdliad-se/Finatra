@@ -32,12 +32,26 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/** Brand-friendly palette for account/category colors. */
+/** Brand warm palette for account/category colors (PRD §5.5 accountPalette). */
 val AccountColors: List<Long> = listOf(
-    0xFF0A756C, 0xFF2E7D5B, 0xFF42A5F5, 0xFF7E57C2, 0xFFEF6C00,
-    0xFFC2185B, 0xFF00897B, 0xFF5D4037, 0xFF455A64, 0xFFD81B60,
+    // Red
+    0xFFE05454, 0xFF8A4A4A,
+    // Green
+    0xFF3D7A5C, 0xFF2A5E43,
+    // Blue
+    0xFF4A7A8A, 0xFF2B4D66,
+    // Orange
+    0xFFC97B4B, 0xFFE68E65,
+    // Yellow
+    0xFFD9A036, 0xFF7A6E3D,
+    // Pink
+    0xFFD46A8D, 0xFF6B4C8A,
 )
 
+/**
+ * Horizontal swatch picker over [AccountColors]. The [selected] color (an ARGB Long) gets a white
+ * ring and check mark; tapping a swatch reports it via [onSelect].
+ */
 @Composable
 fun ColorPickerRow(selected: Long, onSelect: (Long) -> Unit, modifier: Modifier = Modifier) {
     LazyRow(
@@ -61,6 +75,14 @@ fun ColorPickerRow(selected: Long, onSelect: (Long) -> Unit, modifier: Modifier 
     }
 }
 
+/**
+ * Generic read-only exposed dropdown over [options] of any type [T].
+ *
+ * @param label floating label for the field.
+ * @param selected currently chosen option, rendered via [optionLabel].
+ * @param optionLabel maps an option to its display string (used for the field and each menu item).
+ * @param onSelect invoked with the chosen option when a menu item is tapped.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun <T> LabeledDropdown(
@@ -71,6 +93,7 @@ fun <T> LabeledDropdown(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Local open/closed state for the menu, hoisted into the ExposedDropdownMenuBox.
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
         OutlinedTextField(

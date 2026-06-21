@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material3.Icon
@@ -28,16 +28,24 @@ import com.jinatra.finatra.util.CategoryIcons
 import com.jinatra.finatra.util.DateUtil
 import com.jinatra.finatra.util.Money
 
+/**
+ * Single transaction list item: a category-tinted icon chip, a note/category title with an
+ * account · date subtitle, and a trailing signed amount. Expense amounts use the theme expense
+ * color, income the income color, and transfers stay neutral. [onClick] opens the editor.
+ */
 @Composable
 fun TransactionRow(tx: TransactionWithDetails, onClick: () -> Unit) {
+    // Parse the stored type string defensively; unknown values fall through as income-styled.
     val type = runCatching { TransactionType.valueOf(tx.type) }.getOrNull()
     val isExpense = type == TransactionType.EXPENSE
     val isTransfer = type == TransactionType.TRANSFER
+    // Amount color encodes the transaction type: transfers neutral, expense/income semantic.
     val amountColor = when {
         isTransfer -> MaterialTheme.colorScheme.onSurface
         isExpense -> FinatraTheme.expense
         else -> FinatraTheme.income
     }
+    // Tint the icon chip with the category color, falling back to brand primary.
     val iconBg = tx.categoryColor?.let { Color(it) } ?: MaterialTheme.colorScheme.primary
 
     Row(
@@ -48,7 +56,7 @@ fun TransactionRow(tx: TransactionWithDetails, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(42.dp).clip(CircleShape).background(iconBg.copy(alpha = 0.18f)),
+            Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(iconBg.copy(alpha = 0.18f)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

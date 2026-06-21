@@ -14,6 +14,15 @@ import com.jinatra.finatra.R
 /** Thin wrapper that posts brand notifications, respecting runtime permission. */
 object Notifier {
 
+    /**
+     * Posts a notification that opens [MainActivity] when tapped. No-ops when the
+     * POST_NOTIFICATIONS permission is missing.
+     *
+     * @param channel target notification-channel id (see [com.jinatra.finatra.FinatraApp]).
+     * @param id notification id; reusing the same id replaces the existing notification and PendingIntent.
+     * @param title notification title.
+     * @param body notification body, also shown expanded via BigTextStyle.
+     */
     fun post(context: Context, channel: String, id: Int, title: String, body: String) {
         if (!canPost(context)) return
         val intent = Intent(context, MainActivity::class.java)
@@ -33,6 +42,7 @@ object Notifier {
         NotificationManagerCompat.from(context).notify(id, notif)
     }
 
+    /** True if notifications may be posted: always pre-Android 13, otherwise only with POST_NOTIFICATIONS granted. */
     private fun canPost(context: Context): Boolean =
         android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU ||
             ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==

@@ -4,17 +4,59 @@ import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
 
+/**
+ * Currency formatting helpers used across the UI.
+ *
+ * Amounts are plain [Double] values (the app stores monetary amounts as doubles, not minor units).
+ * Formatting always uses two decimal places and a fixed [Locale.US] grouping/decimal convention
+ * (comma thousands separator, dot decimal) so output is stable regardless of device locale; only the
+ * currency symbol varies by code.
+ */
 object Money {
-    fun format(amount: Double, currencyCode: String): String = try {
-        NumberFormat.getCurrencyInstance(Locale.getDefault()).apply {
-            currency = Currency.getInstance(currencyCode)
-            maximumFractionDigits = 2
-        }.format(amount)
-    } catch (e: Exception) {
-        // Unknown ISO code (e.g. custom) — fall back to plain number + code.
-        "%,.2f %s".format(amount, currencyCode)
+    // Preferred display symbols by ISO 4217 code; overrides the JDK symbol, which can differ by locale.
+    private val CurrencySymbols = mapOf(
+        "USD" to "$",
+        "EUR" to "€",
+        "GBP" to "£",
+        "BDT" to "৳",
+        "INR" to "₹",
+        "JPY" to "¥",
+        "CNY" to "¥",
+        "AUD" to "A$",
+        "CAD" to "C$",
+        "AED" to "د.إ",
+        "SAR" to "ر.س",
+        "PKR" to "₨"
+    )
+
+    /**
+     * Display symbol for an ISO 4217 [currencyCode]. Falls back to the JDK's locale symbol, and to
+     * the raw code itself if the code is unknown/invalid (e.g. a typo), so this never throws.
+     */
+    fun getSymbol(currencyCode: String): String {
+        return CurrencySymbols[currencyCode] ?: try {
+            java.util.Currency.getInstance(currencyCode).getSymbol(Locale.getDefault())
+        } catch (e: Exception) {
+            currencyCode
+        }
     }
 
+    /**
+     * Format [amount] as "<symbol><grouped number>", e.g. `$1,234.56`. Always two decimals, no space
+     * between symbol and number. The sign is preserved as-is (a negative amount yields e.g. `$-5.00`);
+     * use [formatSigned] for an explicit leading +/- on the absolute value.
+     */
+    fun format(amount: Double, currencyCode: String): String {
+        val symbol = getSymbol(currencyCode)
+        val formattedNumber = "%,.2f".format(Locale.US, amount)
+        return "$symbol$formattedNumber"
+    }
+
+    /**
+     * Format the magnitude of [amount] with an explicit leading sign: `-` when [isExpense] is true,
+     * otherwise `+` (e.g. `-$5.00` / `+$5.00`). The input sign of [amount] is ignored; only [isExpense]
+     * decides the displayed sign.
+     */
     fun formatSigned(amount: Double, currencyCode: String, isExpense: Boolean): String {
         val sign = if (isExpense) "-" else "+"
         return "$sign${format(kotlin.math.abs(amount), currencyCode)}"

@@ -50,6 +50,22 @@ import com.jinatra.finatra.ui.components.LabeledDropdown
 import com.jinatra.finatra.ui.components.OverlineLabel
 import com.jinatra.finatra.util.COMMON_CURRENCIES
 
+/**
+ * Top-level Settings screen.
+ *
+ * Presents grouped preference cards — appearance (theme, dynamic color), general
+ * (currency, language) and inline notification/security toggles — and navigation rows into
+ * the detail sub-screens. It also hosts the open-source licenses dialog.
+ *
+ * @param onOpenAccounts navigate to account management.
+ * @param onOpenCategories navigate to category management.
+ * @param onOpenRecurring navigate to recurring transactions.
+ * @param onOpenAi navigate to AI provider / on-device model settings.
+ * @param onOpenSecurity navigate to PIN / biometric / auto-lock settings.
+ * @param onOpenBackup navigate to backup, restore and CSV export.
+ * @param onOpenAudit navigate to the audit log.
+ * @param vm settings state/actions; injected via Hilt by default.
+ */
 @Composable
 fun SettingsScreen(
     onOpenAccounts: () -> Unit,
@@ -62,6 +78,7 @@ fun SettingsScreen(
     vm: SettingsViewModel = hiltViewModel(),
 ) {
     val s by vm.settings.collectAsStateWithLifecycle()
+    // Controls the open-source licenses dialog.
     var showLicenses by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -80,7 +97,8 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     IconChip(Icons.Filled.AccountBalanceWallet, tint = MaterialTheme.colorScheme.primary, size = 52.dp)
                     Column {
-                        Text("Finatra", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                        Text("Finatra", style = MaterialTheme.typography.titleLarge,
+                            fontFamily = com.jinatra.finatra.ui.theme.NeganFont,
                             color = MaterialTheme.colorScheme.primary)
                         Text("Your finances, your way.", style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -117,6 +135,15 @@ fun SettingsScreen(
                         selected = s.baseCurrency,
                         optionLabel = { it },
                         onSelect = vm::setCurrency,
+                    )
+                }
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    LabeledDropdown(
+                        label = "Language",
+                        options = listOf("en", "bn"),
+                        selected = s.language,
+                        optionLabel = { if (it == "bn") "বাংলা (Bengali)" else "English" },
+                        onSelect = vm::setLanguage,
                     )
                 }
                 NavRow(Icons.Filled.AccountBalanceWallet, "Accounts", onOpenAccounts)
@@ -191,6 +218,7 @@ fun SettingsScreen(
     }
 }
 
+/** A clickable settings row: leading icon chip, label, and a trailing chevron. */
 @Composable
 private fun NavRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     Row(
@@ -210,6 +238,7 @@ private fun NavRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     }
 }
 
+/** A settings row pairing a label with a trailing [Switch]. */
 @Composable
 private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(

@@ -34,6 +34,11 @@ class MaintenanceWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
 
+    /**
+     * Runs the full maintenance pass. Resolves dependencies via the Hilt entry point,
+     * then performs steps 1–5 below. Returns [Result.success] on completion, or
+     * [Result.retry] if any step throws so WorkManager re-runs it later.
+     */
     override suspend fun doWork(): Result = runCatching {
         val ep = EntryPointAccessors.fromApplication(applicationContext, WorkerEntryPoint::class.java)
         val repo = ep.financeRepository()
@@ -96,6 +101,7 @@ class MaintenanceWorker(
         // 5. Monthly summary (1st of month → recap previous month)
         if (settings.notifMonthly && cal.get(Calendar.DAY_OF_MONTH) == 1) {
             val thisMonthStart = DateUtil.startOfMonth(now)
+            // Previous-month window is [prevMonthStart, thisMonthStart - 1ms] (exclusive of this month).
             val prevMonthStart = DateUtil.plusMonths(thisMonthStart, -1)
             val income = repo.convertedTotalByType(TransactionType.INCOME.name, prevMonthStart, thisMonthStart - 1, base)
             val expense = repo.convertedTotalByType(TransactionType.EXPENSE.name, prevMonthStart, thisMonthStart - 1, base)

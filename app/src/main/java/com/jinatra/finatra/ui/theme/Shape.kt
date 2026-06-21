@@ -4,8 +4,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes
 import androidx.compose.ui.unit.dp
 
-// Material 3 Expressive radii — rounder than stock M3 to match the template's
-// bento cards (rounded-xl) and pill controls.
+/**
+ * Brand corner-radius scale fed to [androidx.compose.material3.MaterialTheme].
+ * Material 3 Expressive radii — rounder than stock M3 to match the template's
+ * bento cards (rounded-xl, the `medium` slot) and pill controls.
+ */
 val FinatraShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(12.dp),

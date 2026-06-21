@@ -1,0 +1,11 @@
+<resources>
+    <string name="tagline">আপনার অর্থ, আপনার নিয়মে।</string>
+    <string name="widget_label">Finatra ব্যালেন্স</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">হোম</string>
+    <string name="nav_transactions">লেনদেন</string>
+    <string name="nav_budgets">বাজেট</string>
+    <string name="nav_analytics">বিশ্লেষণ</string>
+    <string name="nav_settings">সেটিংস</string>
+</resources>

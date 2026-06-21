@@ -43,24 +43,30 @@ import kotlin.math.sin
 
 /** Vibrant fallback palette for segments without an explicit category color. */
 val ChartColors = listOf(
-    Color(0xFF3B82F6), // blue
-    Color(0xFFF59E0B), // amber
-    Color(0xFF22C55E), // green
-    Color(0xFF8B5CF6), // purple
-    Color(0xFFEF4444), // red
-    Color(0xFF06B6D4), // cyan
-    Color(0xFFEC4899), // pink
-    Color(0xFF14B8A6), // teal
+    Color(0xFFE05454),
+    Color(0xFFE8845A),
+    Color(0xFFE8B85A),
+    Color(0xFF5AB8A8),
+    Color(0xFF5A7BE8),
+    Color(0xFFA05AE8),
+    Color(0xFFE85A9E),
+    Color(0xFF7ABE5A),
 )
 
+/** Resolves a segment color: the explicit [hex] if set, otherwise a [ChartColors] entry by [index]. */
 fun chartColor(hex: Long?, index: Int): Color =
     if (hex != null) Color(hex) else ChartColors[index % ChartColors.size]
 
+/** One slice of a [SpendingRing]: its [label], numeric [value] (drives the sweep), and [color]. */
 data class RingSegment(val label: String, val value: Double, val color: Color)
 
 /**
  * Donut ring with rounded caps, a center label, and percentage labels on each arc.
  * Pass [centerTop] (small caption) and [centerValue] (big number) for the hole.
+ *
+ * @param segments slices to draw; sweep is proportional to each segment's value over the total.
+ * @param ringThickness stroke width of the donut.
+ * @param showPercentLabels whether to draw a `%` label outside each arc wide enough to fit one.
  */
 @Composable
 fun SpendingRing(
@@ -96,6 +102,7 @@ fun SpendingRing(
             )
             if (total <= 0.0) return@Canvas
 
+            // Draw each slice clockwise from 12 o'clock (-90°), leaving a small gap between arcs.
             val gap = 5f
             var start = -90f
             segments.forEach { seg ->
@@ -204,6 +211,7 @@ fun CategoryStatGrid(items: List<CategoryStat>, modifier: Modifier = Modifier) {
     }
 }
 
+/** Pre-formatted data for one [CategoryStatCard] tile (amount/percent are display-ready). */
 data class CategoryStat(
     val name: String,
     val amount: String,
@@ -211,6 +219,7 @@ data class CategoryStat(
     val color: Color,
 )
 
+/** One period's income vs. expense totals for an [IncomeExpenseBars] column. */
 data class BarGroup(val label: String, val income: Double, val expense: Double)
 
 /** Grouped income/expense bars per period (PRD 6.7). */
@@ -245,6 +254,7 @@ fun IncomeExpenseBars(
     }
 }
 
+/** A single rounded-top bar filling [fraction] of its height (clamped so zero values stay visible). */
 @Composable
 private fun Bar(fraction: Float, color: Color, modifier: Modifier) {
     Box(
@@ -263,6 +273,7 @@ fun NetWorthLine(
     lineColor: Color,
     modifier: Modifier = Modifier,
 ) {
+    // A line needs at least two points; render nothing otherwise.
     if (values.size < 2) return
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     val measurer = rememberTextMeasurer()
