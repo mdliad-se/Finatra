@@ -71,4 +71,17 @@ object DateUtil {
     fun plusMonths(epoch: Long, months: Int): Long = Calendar.getInstance().apply {
         timeInMillis = epoch; add(Calendar.MONTH, months)
     }.timeInMillis
+
+    /** Whole calendar months from [from] to [to], rounded up to the next month and floored at 0.
+     *  Used to size a savings/EMI schedule to a deadline. */
+    fun monthsUntil(to: Long, from: Long = System.currentTimeMillis()): Int {
+        if (to <= from) return 0
+        val cf = Calendar.getInstance().apply { timeInMillis = from }
+        val ct = Calendar.getInstance().apply { timeInMillis = to }
+        var months = (ct.get(Calendar.YEAR) - cf.get(Calendar.YEAR)) * 12 +
+            (ct.get(Calendar.MONTH) - cf.get(Calendar.MONTH))
+        // Round up when the target day-of-month hasn't been reached yet.
+        if (ct.get(Calendar.DAY_OF_MONTH) > cf.get(Calendar.DAY_OF_MONTH)) months++
+        return months.coerceAtLeast(0)
+    }
 }

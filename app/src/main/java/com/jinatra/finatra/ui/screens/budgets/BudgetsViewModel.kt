@@ -5,15 +5,18 @@ import androidx.lifecycle.viewModelScope
 import com.jinatra.finatra.data.ai.AiService
 import com.jinatra.finatra.data.local.entity.BudgetEntity
 import com.jinatra.finatra.data.local.entity.BudgetPeriod
+import com.jinatra.finatra.data.local.entity.LoanEntity
 import com.jinatra.finatra.data.prefs.SettingsRepository
 import com.jinatra.finatra.data.repository.FinanceRepository
 import com.jinatra.finatra.util.DateUtil
+import com.jinatra.finatra.util.Emi
 import com.jinatra.finatra.util.Money
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -40,6 +43,12 @@ data class BudgetRow(
 data class BudgetsUiState(
     val rows: List<BudgetRow> = emptyList(),
     val baseCurrency: String = "USD",
+)
+
+/** A loan paired with its current EMI schedule (payment, remaining balance, progress). */
+data class LoanRow(
+    val loan: LoanEntity,
+    val schedule: Emi.Schedule,
 )
 
 /** An AI-recommended monthly limit for a category (PRD 6.9). */
@@ -78,7 +87,34 @@ class BudgetsViewModel @Inject constructor(
         BudgetsUiState(rows, s.baseCurrency)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BudgetsUiState())
 
+    // Tracked loans with their EMI schedule computed from months elapsed since the start date.
+    val loans = repo.observeLoans()
+        .map { list ->
+            val now = System.currentTimeMillis()
+            list.map { l ->
+                LoanRow(l, Emi.schedule(l.principal, l.annualRatePct, l.tenureMonths, DateUtil.monthsUntil(now, l.startDate)))
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val aiAvailable: Boolean get() = ai.isConfigured()
+
+    /** Add a loan / EMI plan; its first payment month is now. */
+    fun addLoan(name: String, principal: Double, annualRatePct: Double, tenureMonths: Int, currency: String) {
+        if (name.isBlank() || principal <= 0 || tenureMonths <= 0) return
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            repo.upsertLoan(
+                LoanEntity(
+                    name = name.trim(), principal = principal, annualRatePct = annualRatePct,
+                    tenureMonths = tenureMonths, startDate = now, currency = currency, createdAt = now,
+                )
+            )
+        }
+    }
+
+    /** Remove a loan. */
+    fun deleteLoan(l: LoanEntity) { viewModelScope.launch { repo.deleteLoan(l) } }
 
     private val _suggesting = MutableStateFlow(false)
     val suggesting = _suggesting.asStateFlow()

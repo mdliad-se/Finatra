@@ -123,6 +123,31 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/**
+ * v6 -> v7: goal contribution plans + EMI/loan tracking. Adds goals.monthlyTarget /
+ * goals.planStartedAt and the loans table.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE goals ADD COLUMN monthlyTarget REAL NOT NULL DEFAULT 0.0")
+        db.execSQL("ALTER TABLE goals ADD COLUMN planStartedAt INTEGER")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS loans (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                principal REAL NOT NULL,
+                annualRatePct REAL NOT NULL,
+                tenureMonths INTEGER NOT NULL,
+                startDate INTEGER NOT NULL,
+                currency TEXT NOT NULL,
+                createdAt INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+    }
+}
+
 /** All schema migrations in order, handed to Room's builder so existing installs upgrade
  *  step-by-step from v1 through the current version without data loss. */
-val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)

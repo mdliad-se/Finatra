@@ -132,7 +132,9 @@ data class ExchangeRateEntity(
     val updatedAt: Long,
 )
 
-/** Savings goal / debt tracker (PRD 6.9). For SAVINGS: saved/target. For DEBT_*: repaid/total. */
+/** Savings goal / debt tracker (PRD 6.9). For SAVINGS: saved/target. For DEBT_*: repaid/total.
+ *  [monthlyTarget] + [planStartedAt] hold a contribution plan (PRD goal/savings plan): the amount
+ *  to set aside each month and when the plan began, so progress can be judged on-track vs behind. */
 @Entity(tableName = "goals")
 data class GoalEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -144,6 +146,23 @@ data class GoalEntity(
     val deadline: Long? = null,
     val colorHex: Long,
     val iconKey: String = "goal",
+    val createdAt: Long,
+    val monthlyTarget: Double = 0.0,    // planned monthly contribution; 0 = no plan yet
+    val planStartedAt: Long? = null,    // when the contribution plan began (for on-track checks)
+)
+
+/** A loan tracked as an EMI plan (PRD EMI plan). The fixed monthly payment, remaining balance and
+ *  progress are derived from these terms via [com.jinatra.finatra.util.Emi]; surfaced under Budgets
+ *  as a recurring monthly commitment. */
+@Entity(tableName = "loans")
+data class LoanEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val principal: Double,
+    val annualRatePct: Double,      // annual interest rate, percent (0 for interest-free)
+    val tenureMonths: Int,
+    val startDate: Long,            // first payment month; drives months-paid-so-far
+    val currency: String,
     val createdAt: Long,
 )
 

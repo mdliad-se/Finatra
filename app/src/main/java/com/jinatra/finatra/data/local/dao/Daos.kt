@@ -14,6 +14,7 @@ import com.jinatra.finatra.data.local.entity.ChatMessageEntity
 import com.jinatra.finatra.data.local.entity.ChatSessionEntity
 import com.jinatra.finatra.data.local.entity.ExchangeRateEntity
 import com.jinatra.finatra.data.local.entity.GoalEntity
+import com.jinatra.finatra.data.local.entity.LoanEntity
 import com.jinatra.finatra.data.local.entity.RecurringTransactionEntity
 import com.jinatra.finatra.data.local.entity.TransactionEntity
 import com.jinatra.finatra.data.local.entity.TransactionTemplateEntity
@@ -244,6 +245,15 @@ interface GoalDao {
     @Query("SELECT * FROM goals ORDER BY createdAt DESC") fun observeAll(): Flow<List<GoalEntity>>
     @Query("SELECT * FROM goals WHERE id = :id") suspend fun byId(id: Long): GoalEntity?
     @Query("SELECT COUNT(*) FROM goals") suspend fun count(): Int
+}
+
+/** CRUD for tracked loans / EMI plans. */
+@Dao
+interface LoanDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(l: LoanEntity): Long
+    @Delete suspend fun delete(l: LoanEntity)
+    @Query("SELECT * FROM loans ORDER BY createdAt DESC") fun observeAll(): Flow<List<LoanEntity>>
+    @Query("SELECT * FROM loans WHERE id = :id") suspend fun byId(id: Long): LoanEntity?
 }
 
 /**

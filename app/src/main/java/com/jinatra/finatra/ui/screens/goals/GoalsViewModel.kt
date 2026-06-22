@@ -7,8 +7,10 @@ import com.jinatra.finatra.data.local.entity.GoalEntity
 import com.jinatra.finatra.data.local.entity.GoalType
 import com.jinatra.finatra.data.prefs.SettingsRepository
 import com.jinatra.finatra.data.repository.FinanceRepository
+import com.jinatra.finatra.util.DateUtil
 import com.jinatra.finatra.util.Money
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlin.math.ceil
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +31,35 @@ data class GoalsUiState(
     val debts: List<GoalEntity> = emptyList(),
     val baseCurrency: String = "USD",
 )
+
+/**
+ * Derived view of a goal's contribution plan (PRD goal/savings plan): the monthly target, how far
+ * the saver *should* be by now, whether they're keeping up, and when the goal finishes at this pace.
+ */
+data class GoalPlan(
+    val monthlyTarget: Double,
+    val expectedSaved: Double,
+    val onTrack: Boolean,
+    val projectedFinish: Long?,
+) {
+    companion object {
+        /** Build the plan for [g], or null when no plan is set (monthlyTarget <= 0). */
+        fun of(g: GoalEntity, now: Long = System.currentTimeMillis()): GoalPlan? {
+            if (g.monthlyTarget <= 0.0) return null
+            val started = g.planStartedAt ?: g.createdAt
+            val monthsElapsed = DateUtil.monthsUntil(now, started)
+            val expected = (g.monthlyTarget * monthsElapsed).coerceAtMost(g.targetAmount)
+            val remaining = (g.targetAmount - g.savedAmount).coerceAtLeast(0.0)
+            val finish = if (remaining <= 0.0) now
+                else DateUtil.plusMonths(now, ceil(remaining / g.monthlyTarget).toInt().coerceAtLeast(1))
+            // Small tolerance so being a hair behind doesn't flip the badge to "behind".
+            return GoalPlan(g.monthlyTarget, expected, g.savedAmount >= expected * 0.95, finish)
+        }
+    }
+}
+
+/** One goal's slice of an AI/heuristic savings plan, pending review. */
+data class SavingsPlanItem(val goalId: Long, val name: String, val monthly: Double)
 
 /**
  * ViewModel backing [GoalsScreen]. Splits the live goals stream into savings and debts
@@ -71,6 +102,101 @@ class GoalsViewModel @Inject constructor(
             repo.upsertGoal(g.copy(savedAmount = (g.savedAmount + delta).coerceAtLeast(0.0)))
         }
     }
+
+    // --- Goal contribution plan (PRD goal plan) ---
+    private val _planning = MutableStateFlow(false)
+    val planning = _planning.asStateFlow()
+
+    /**
+     * Sets a monthly contribution plan for [g]. Uses the deadline to pace it when one is set,
+     * otherwise asks the AI for a sensible monthly amount (falling back to clearing the balance
+     * over a year). Persists [GoalEntity.monthlyTarget] + [GoalEntity.planStartedAt].
+     */
+    fun autoPlan(g: GoalEntity) {
+        if (_planning.value) return
+        _planning.value = true
+        viewModelScope.launch {
+            val remaining = (g.targetAmount - g.savedAmount).coerceAtLeast(0.0)
+            val base = state.value.baseCurrency
+            val monthly = when {
+                remaining <= 0.0 -> 0.0
+                // Pace to the deadline when there is one.
+                g.deadline != null && g.deadline > System.currentTimeMillis() ->
+                    remaining / DateUtil.monthsUntil(g.deadline).coerceAtLeast(1)
+                // No deadline: let the AI propose a monthly amount from the user's finances.
+                aiAvailable -> aiMonthly(g, remaining, base) ?: (remaining / 12.0)
+                else -> remaining / 12.0
+            }
+            repo.upsertGoal(g.copy(monthlyTarget = monthly, planStartedAt = System.currentTimeMillis()))
+            _planning.value = false
+        }
+    }
+
+    /** Ask the AI for a single monthly contribution figure; null if it can't be parsed. */
+    private suspend fun aiMonthly(g: GoalEntity, remaining: Double, base: String): Double? {
+        val netWorth = repo.convertedNetWorth(base)
+        val health = repo.financeHealth(base)
+        val prompt = """
+            Suggest a realistic MONTHLY savings contribution to reach a goal.
+            Goal: ${g.name}. Remaining to save: ${Money.format(remaining, base)}.
+            User net worth ${Money.format(netWorth, base)}, savings rate ${(health.savingsRate * 100).toInt()}%.
+            Reply with ONLY a number (the monthly amount in $base), no currency symbol, no prose.
+        """.trimIndent()
+        val raw = ai.chat(prompt)?.trim() ?: return null
+        return Regex("[0-9]+(\\.[0-9]+)?").find(raw.replace(",", ""))?.value?.toDoubleOrNull()?.takeIf { it > 0 }
+    }
+
+    /** Clear a goal's plan. */
+    fun clearPlan(g: GoalEntity) {
+        viewModelScope.launch { repo.upsertGoal(g.copy(monthlyTarget = 0.0, planStartedAt = null)) }
+    }
+
+    // --- Savings plan: allocate the monthly surplus across goals (PRD savings plan) ---
+    private val _savingsPlan = MutableStateFlow<List<SavingsPlanItem>>(emptyList())
+    val savingsPlan = _savingsPlan.asStateFlow()
+    private val _buildingPlan = MutableStateFlow(false)
+    val buildingPlan = _buildingPlan.asStateFlow()
+
+    /**
+     * Proposes how to split the projected monthly surplus across unfinished savings goals,
+     * proportional to how much each still needs. Falls back to clearing each balance over a year
+     * when there's no surplus. Results are staged in [savingsPlan] for review.
+     */
+    fun buildSavingsPlan(onError: (String) -> Unit) {
+        if (_buildingPlan.value) return
+        val goals = state.value.savings.filter { it.savedAmount < it.targetAmount }
+        if (goals.isEmpty()) { onError("Add a savings goal first."); return }
+        _buildingPlan.value = true
+        viewModelScope.launch {
+            val base = state.value.baseCurrency
+            val surplus = repo.monthlyForecast(base).projectedSavings.coerceAtLeast(0.0)
+            val totalRemaining = goals.sumOf { (it.targetAmount - it.savedAmount).coerceAtLeast(0.0) }
+            _savingsPlan.value = goals.map { g ->
+                val remaining = (g.targetAmount - g.savedAmount).coerceAtLeast(0.0)
+                val monthly = if (surplus > 0.0 && totalRemaining > 0.0) surplus * (remaining / totalRemaining)
+                    else remaining / 12.0
+                SavingsPlanItem(g.id, g.name, monthly)
+            }
+            _buildingPlan.value = false
+        }
+    }
+
+    /** Apply the staged savings plan: set each goal's monthly target and start it now. */
+    fun applySavingsPlan() {
+        val items = _savingsPlan.value
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            items.forEach { item ->
+                repo.goalById(item.goalId)?.let { g ->
+                    repo.upsertGoal(g.copy(monthlyTarget = item.monthly, planStartedAt = now))
+                }
+            }
+            _savingsPlan.value = emptyList()
+        }
+    }
+
+    /** Discard the staged savings plan. */
+    fun dismissSavingsPlan() { _savingsPlan.value = emptyList() }
 
     /** Clears the affordability result. */
     fun dismissAfford() { _affordResult.value = null }

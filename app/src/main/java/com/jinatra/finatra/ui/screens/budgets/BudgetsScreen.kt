@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -25,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,8 +80,11 @@ fun BudgetsScreen(
     vm: BudgetsViewModel = hiltViewModel(),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val loans by vm.loans.collectAsStateWithLifecycle()
     // Non-null while a delete confirmation is showing for that budget row.
     var pendingDelete by remember { mutableStateOf<BudgetRow?>(null) }
+    var pendingLoanDelete by remember { mutableStateOf<LoanRow?>(null) }
+    var showAddLoan by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -216,6 +222,33 @@ fun BudgetsScreen(
                 }
             }
 
+            // Loans & EMI — monthly debt commitments shown under the budget (PRD EMI plan).
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text("Loans & EMI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        val totalEmi = loans.sumOf { it.schedule.monthlyPayment }
+                        if (loans.isNotEmpty()) {
+                            Text("${Money.format(totalEmi, s.baseCurrency)} / month committed",
+                                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    TextButton(onClick = { showAddLoan = true }) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(4.dp))
+                        Text("Add")
+                    }
+                }
+            }
+            if (loans.isEmpty()) {
+                item {
+                    Text("No loans tracked. Add one to see its EMI and remaining balance here.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                items(loans, key = { it.loan.id }) { row -> LoanCard(row, s.baseCurrency, onDelete = { pendingLoanDelete = row }) }
+            }
+
             // Cash Flow Forecast Card
             item {
                 // Placeholder projected balance heuristic until a real forecast is wired in.
@@ -241,6 +274,119 @@ fun BudgetsScreen(
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
         )
     }
+
+    pendingLoanDelete?.let { row ->
+        AlertDialog(
+            onDismissRequest = { pendingLoanDelete = null },
+            title = { Text("Delete loan?") },
+            text = { Text("Stop tracking the ${row.loan.name} EMI? This doesn't change your transactions.") },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteLoan(row.loan); pendingLoanDelete = null }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingLoanDelete = null }) { Text("Cancel") } },
+        )
+    }
+
+    if (showAddLoan) {
+        AddLoanDialog(
+            baseCurrency = s.baseCurrency,
+            onDismiss = { showAddLoan = false },
+            onConfirm = { name, principal, rate, tenure ->
+                vm.addLoan(name, principal, rate, tenure, s.baseCurrency); showAddLoan = false
+            },
+        )
+    }
+}
+
+/**
+ * Single loan row: name, monthly EMI, remaining balance and a progress bar of payments made
+ * against the tenure. Tapping the trash icon requests deletion via [onDelete].
+ */
+@Composable
+private fun LoanCard(row: LoanRow, currency: String, onDelete: () -> Unit) {
+    val sc = row.schedule
+    val cur = row.loan.currency.ifBlank { currency }
+    ExpressiveCard(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(row.loan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("${Money.format(sc.monthlyPayment, cur)}/mo · ${sc.monthsPaid}/${sc.tenureMonths} paid",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete ${row.loan.name} loan",
+                    tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        LinearProgressIndicator(
+            progress = { sc.fractionPaid },
+            modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            if (sc.isPaidOff) "Paid off" else "${Money.format(sc.remainingBalance, cur)} remaining",
+            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * Dialog to add a loan / EMI plan. Collects name, principal, annual rate and tenure, and shows a
+ * live preview of the computed monthly payment. Save is enabled once the figures are valid.
+ */
+@Composable
+private fun AddLoanDialog(
+    baseCurrency: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String, Double, Double, Int) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var principal by remember { mutableStateOf("") }
+    var rate by remember { mutableStateOf("") }
+    var tenure by remember { mutableStateOf("") }
+
+    val p = principal.toDoubleOrNull() ?: 0.0
+    val r = rate.toDoubleOrNull() ?: 0.0
+    val n = tenure.toIntOrNull() ?: 0
+    val valid = name.isNotBlank() && p > 0 && n > 0
+    val emi = if (valid) com.jinatra.finatra.util.Emi.monthlyPayment(p, r, n) else 0.0
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add loan / EMI") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
+                OutlinedTextField(
+                    principal, { principal = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("Principal amount") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                )
+                OutlinedTextField(
+                    rate, { rate = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("Annual interest rate %") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                )
+                OutlinedTextField(
+                    tenure, { tenure = it.filter { c -> c.isDigit() } },
+                    label = { Text("Tenure (months)") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                if (valid) {
+                    Text("Monthly EMI: ${Money.format(emi, baseCurrency)}",
+                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        },
+        confirmButton = { TextButton(enabled = valid, onClick = { onConfirm(name.trim(), p, r, n) }) { Text("Add") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /**

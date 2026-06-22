@@ -9,6 +9,7 @@ import com.jinatra.finatra.data.local.MIGRATION_2_3
 import com.jinatra.finatra.data.local.MIGRATION_3_4
 import com.jinatra.finatra.data.local.MIGRATION_4_5
 import com.jinatra.finatra.data.local.MIGRATION_5_6
+import com.jinatra.finatra.data.local.MIGRATION_6_7
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -169,6 +170,36 @@ class MigrationTest {
         db.execSQL("INSERT INTO chat_messages (sessionId, role, content, timestamp) VALUES (1, 'ai', 'hi', 0)")
         db.query("SELECT content FROM chat_messages WHERE sessionId = 1").use { c ->
             assertTrue(c.moveToFirst()); assertEquals("hi", c.getString(0))
+        }
+    }
+
+    /** v6 -> v7 adds goal plan columns (default 0 / null) and the loans table, preserving goals. */
+    @Test
+    fun migrate6To7_addsGoalPlanAndLoans() {
+        helper.createDatabase(dbName, 6).apply {
+            execSQL(
+                "INSERT INTO goals (name, type, targetAmount, savedAmount, currency, deadline, colorHex, iconKey, createdAt) " +
+                    "VALUES ('Car', 'SAVINGS', 10000.0, 2000.0, 'USD', NULL, 175362, 'goal', 1700000000000)",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(dbName, 7, true, MIGRATION_6_7)
+
+        // Existing goal survived; new plan columns defaulted.
+        db.query("SELECT name, monthlyTarget, planStartedAt FROM goals").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("Car", c.getString(0))
+            assertEquals(0.0, c.getDouble(1), 0.001)
+            assertTrue("planStartedAt defaults to null", c.isNull(2))
+        }
+        // Loans table is usable.
+        db.execSQL(
+            "INSERT INTO loans (name, principal, annualRatePct, tenureMonths, startDate, currency, createdAt) " +
+                "VALUES ('Auto loan', 12000.0, 9.5, 36, 1700000000000, 'USD', 1700000000000)",
+        )
+        db.query("SELECT name, tenureMonths FROM loans").use { c ->
+            assertTrue(c.moveToFirst()); assertEquals("Auto loan", c.getString(0)); assertEquals(36, c.getInt(1))
         }
     }
 }

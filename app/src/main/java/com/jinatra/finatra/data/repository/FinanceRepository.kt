@@ -13,6 +13,7 @@ import com.jinatra.finatra.data.local.entity.ChatMessageEntity
 import com.jinatra.finatra.data.local.entity.ChatSessionEntity
 import com.jinatra.finatra.data.local.entity.ExchangeRateEntity
 import com.jinatra.finatra.data.local.entity.GoalEntity
+import com.jinatra.finatra.data.local.entity.LoanEntity
 import com.jinatra.finatra.data.local.entity.RecurrenceFrequency
 import com.jinatra.finatra.data.local.entity.RecurringTransactionEntity
 import com.jinatra.finatra.data.local.entity.TransactionEntity
@@ -116,6 +117,7 @@ class FinanceRepository @Inject constructor(
     private val audit = db.auditDao()
     private val rates = db.exchangeRateDao()
     private val goals = db.goalDao()
+    private val loans = db.loanDao()
     private val chat = db.chatDao()
     private val templates = db.templateDao()
 
@@ -377,6 +379,11 @@ class FinanceRepository @Inject constructor(
     suspend fun deleteGoal(g: GoalEntity) { if (!session.isDecoy) goals.delete(g) }
     suspend fun goalById(id: Long) = if (session.isDecoy) null else goals.byId(id)
     suspend fun goalCount() = goals.count()
+
+    // --- Loans / EMI plans ---
+    fun observeLoans(): Flow<List<LoanEntity>> = gated(loans.observeAll(), emptyList())
+    suspend fun upsertLoan(l: LoanEntity) = if (session.isDecoy) -1L else loans.upsert(l)
+    suspend fun deleteLoan(l: LoanEntity) { if (!session.isDecoy) loans.delete(l) }
 
     // --- Chat sessions + history (PRD 6.11) ---
     /** Conversations of one [kind] ("coach" / "budget"), most-recently-updated first. */
