@@ -212,6 +212,8 @@ fun FinatraRoot(onboardingDone: Boolean, quizDone: Boolean) {
                 BudgetChatScreen(
                     onBack = { navController.popBackStack() },
                     onOpenAiSettings = { navController.navigate(Routes.AI_SETTINGS) },
+                    // After creating budgets, drop the chat and return to the Budgets screen.
+                    onBudgetsCreated = { navController.popBackStack(Routes.BUDGETS, inclusive = false) },
                 )
             }
             composable(Routes.CALENDAR) {

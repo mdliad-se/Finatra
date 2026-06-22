@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
@@ -75,6 +77,8 @@ fun BudgetsScreen(
     vm: BudgetsViewModel = hiltViewModel(),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
+    // Non-null while a delete confirmation is showing for that budget row.
+    var pendingDelete by remember { mutableStateOf<BudgetRow?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -208,7 +212,7 @@ fun BudgetsScreen(
                 }
             } else {
                 items(s.rows, key = { it.budget.id }) { row ->
-                    BudgetCard(row, s.baseCurrency) { onEdit(row.budget.id) }
+                    BudgetCard(row, s.baseCurrency, onClick = { onEdit(row.budget.id) }, onDelete = { pendingDelete = row })
                 }
             }
 
@@ -222,6 +226,21 @@ fun BudgetsScreen(
             item { Spacer(Modifier.height(80.dp)) }
         }
     }
+
+    // Confirm before removing a budget — deletion is immediate and not undoable from here.
+    pendingDelete?.let { row ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete budget?") },
+            text = { Text("Remove the ${row.categoryName} budget? Your transactions are not affected.") },
+            confirmButton = {
+                TextButton(onClick = { vm.delete(row.budget); pendingDelete = null }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
+        )
+    }
 }
 
 /**
@@ -230,7 +249,7 @@ fun BudgetsScreen(
  * triggers [onClick] (edit).
  */
 @Composable
-private fun BudgetCard(row: BudgetRow, currency: String, onClick: () -> Unit) {
+private fun BudgetCard(row: BudgetRow, currency: String, onClick: () -> Unit, onDelete: () -> Unit) {
     val fraction = row.fraction
     // Traffic-light progress colour by how much of the budget is consumed.
     val progressColor = when {
@@ -255,12 +274,22 @@ private fun BudgetCard(row: BudgetRow, currency: String, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = "$daysRemaining days left",
-                style = MaterialTheme.typography.labelSmall,
-                color = progressColor,
-                fontWeight = FontWeight.Bold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "$daysRemaining days left",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = progressColor,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Filled.DeleteOutline,
+                        contentDescription = "Delete ${row.categoryName} budget",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(10.dp))
         LinearProgressIndicator(

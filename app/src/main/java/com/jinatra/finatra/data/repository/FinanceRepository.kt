@@ -10,6 +10,7 @@ import com.jinatra.finatra.data.local.entity.AuditLogEntity
 import com.jinatra.finatra.data.local.entity.BudgetEntity
 import com.jinatra.finatra.data.local.entity.CategoryEntity
 import com.jinatra.finatra.data.local.entity.ChatMessageEntity
+import com.jinatra.finatra.data.local.entity.ChatSessionEntity
 import com.jinatra.finatra.data.local.entity.ExchangeRateEntity
 import com.jinatra.finatra.data.local.entity.GoalEntity
 import com.jinatra.finatra.data.local.entity.RecurrenceFrequency
@@ -377,11 +378,35 @@ class FinanceRepository @Inject constructor(
     suspend fun goalById(id: Long) = if (session.isDecoy) null else goals.byId(id)
     suspend fun goalCount() = goals.count()
 
-    // --- AI Coach chat history (PRD 6.11) ---
-    fun observeChat(): Flow<List<ChatMessageEntity>> = gated(chat.observeAll(), emptyList())
-    suspend fun addChatMessage(role: String, content: String, at: Long = System.currentTimeMillis()) =
-        if (session.isDecoy) -1L else chat.insert(ChatMessageEntity(role = role, content = content, timestamp = at))
-    suspend fun clearChat() { if (!session.isDecoy) chat.clear() }
+    // --- Chat sessions + history (PRD 6.11) ---
+    /** Conversations of one [kind] ("coach" / "budget"), most-recently-updated first. */
+    fun observeChatSessions(kind: String): Flow<List<ChatSessionEntity>> = gated(chat.observeSessions(kind), emptyList())
+    /** Ordered messages of one conversation. */
+    fun observeChatMessages(sessionId: Long): Flow<List<ChatMessageEntity>> = gated(chat.observeBySession(sessionId), emptyList())
+
+    suspend fun createChatSession(kind: String, title: String, at: Long = System.currentTimeMillis()): Long =
+        if (session.isDecoy) -1L
+        else chat.insertSession(ChatSessionEntity(kind = kind, title = title, createdAt = at, updatedAt = at))
+
+    /** Resume the most recent [kind] session, or create a fresh one titled [newTitle]. */
+    suspend fun latestOrNewChatSession(kind: String, newTitle: String): Long {
+        if (session.isDecoy) return -1L
+        return chat.latestSession(kind)?.id ?: createChatSession(kind, newTitle)
+    }
+
+    /** Append a message to [sessionId] and bump the session's updatedAt for ordering. */
+    suspend fun addChatMessage(sessionId: Long, role: String, content: String, at: Long = System.currentTimeMillis()): Long {
+        if (session.isDecoy || sessionId <= 0) return -1L
+        val id = chat.insert(ChatMessageEntity(sessionId = sessionId, role = role, content = content, timestamp = at))
+        chat.touchSession(sessionId, at)
+        return id
+    }
+
+    suspend fun renameChatSession(id: Long, title: String, at: Long = System.currentTimeMillis()) {
+        if (!session.isDecoy && id > 0) chat.renameSession(id, title, at)
+    }
+    suspend fun deleteChatSession(id: Long) { if (!session.isDecoy && id > 0) chat.deleteSession(id) }
+    suspend fun clearChatSession(id: Long) { if (!session.isDecoy && id > 0) chat.clearSession(id) }
 
     /** Financial health score (PRD 6.16): savings rate + budget adherence, base currency. */
     suspend fun financeHealth(base: String, now: Long = System.currentTimeMillis()): HealthScore {

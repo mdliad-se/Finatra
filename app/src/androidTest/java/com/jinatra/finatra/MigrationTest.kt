@@ -8,6 +8,7 @@ import com.jinatra.finatra.data.local.MIGRATION_1_2
 import com.jinatra.finatra.data.local.MIGRATION_2_3
 import com.jinatra.finatra.data.local.MIGRATION_3_4
 import com.jinatra.finatra.data.local.MIGRATION_4_5
+import com.jinatra.finatra.data.local.MIGRATION_5_6
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -126,6 +127,48 @@ class MigrationTest {
         )
         db.query("SELECT name, amount FROM tx_templates").use { c ->
             assertTrue(c.moveToFirst()); assertEquals("Coffee", c.getString(0)); assertEquals(150.0, c.getDouble(1), 0.001)
+        }
+    }
+
+    /** v5 -> v6 adds chat_sessions and rebuilds chat_messages with a sessionId FK; existing AI Coach
+     *  messages are folded into a single "Previous chat" coach session so no history is lost. */
+    @Test
+    fun migrate5To6_foldsLegacyChatIntoSession() {
+        helper.createDatabase(dbName, 5).apply {
+            execSQL("INSERT INTO chat_messages (role, content, timestamp) VALUES ('user', 'old message', 1700000000000)")
+            execSQL("INSERT INTO chat_messages (role, content, timestamp) VALUES ('ai', 'old reply', 1700000000001)")
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(dbName, 6, true, MIGRATION_5_6)
+
+        // Both legacy messages survived and were assigned to one created session.
+        db.query("SELECT DISTINCT sessionId FROM chat_messages").use { c ->
+            assertTrue(c.moveToFirst()); assertTrue("messages got a session", c.getLong(0) > 0)
+            assertEquals("all under one session", 1, c.count)
+        }
+        db.query("SELECT COUNT(*) FROM chat_messages").use { c ->
+            assertTrue(c.moveToFirst()); assertEquals(2, c.getInt(0))
+        }
+        db.query("SELECT kind, title FROM chat_sessions").use { c ->
+            assertTrue(c.moveToFirst()); assertEquals("coach", c.getString(0)); assertEquals("Previous chat", c.getString(1))
+        }
+    }
+
+    /** v5 -> v6 with no prior history: no legacy session is created, and the new schema is usable. */
+    @Test
+    fun migrate5To6_emptyChat_createsNoSessionAndIsUsable() {
+        helper.createDatabase(dbName, 5).apply { close() }
+        val db = helper.runMigrationsAndValidate(dbName, 6, true, MIGRATION_5_6)
+
+        db.query("SELECT COUNT(*) FROM chat_sessions").use { c ->
+            assertTrue(c.moveToFirst()); assertEquals(0, c.getInt(0))
+        }
+        // New session + message round-trips through the rebuilt schema.
+        db.execSQL("INSERT INTO chat_sessions (kind, title, createdAt, updatedAt) VALUES ('budget', 'Budget plan', 0, 0)")
+        db.execSQL("INSERT INTO chat_messages (sessionId, role, content, timestamp) VALUES (1, 'ai', 'hi', 0)")
+        db.query("SELECT content FROM chat_messages WHERE sessionId = 1").use { c ->
+            assertTrue(c.moveToFirst()); assertEquals("hi", c.getString(0))
         }
     }
 }

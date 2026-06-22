@@ -161,10 +161,34 @@ data class TransactionTemplateEntity(
     val createdAt: Long,
 )
 
-/** Persistent AI Coach chat message (PRD 6.11). role = "user" | "ai". */
-@Entity(tableName = "chat_messages")
+/**
+ * A saved chat conversation (PRD 6.11). [kind] separates the AI Coach ("coach") from the
+ * budget planner ("budget") so each surface lists only its own history. [title] is shown in
+ * the session list — auto-derived from the first user message, renamable by the user.
+ */
+@Entity(tableName = "chat_sessions")
+data class ChatSessionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val kind: String,            // "coach" | "budget"
+    val title: String,
+    val createdAt: Long,
+    val updatedAt: Long,         // bumped on each new message; drives most-recent-first ordering
+)
+
+/**
+ * Persistent chat message (PRD 6.11). role = "user" | "ai". Belongs to a [ChatSessionEntity]
+ * via [sessionId]; deleting the session cascades to its messages.
+ */
+@Entity(
+    tableName = "chat_messages",
+    foreignKeys = [
+        ForeignKey(entity = ChatSessionEntity::class, parentColumns = ["id"], childColumns = ["sessionId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("sessionId")],
+)
 data class ChatMessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sessionId: Long,
     val role: String,
     val content: String,
     val timestamp: Long,

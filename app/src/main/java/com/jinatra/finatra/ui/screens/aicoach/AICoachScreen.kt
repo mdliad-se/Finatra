@@ -21,20 +21,32 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,23 +56,31 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jinatra.finatra.data.local.entity.ChatMessageEntity
+import com.jinatra.finatra.data.local.entity.ChatSessionEntity
 import com.jinatra.finatra.ui.theme.WarmRed
 import com.jinatra.finatra.ui.theme.SweetCream
+import kotlinx.coroutines.launch
 
 /**
- * Conversational AI finance coach: a chat UI over the persisted message history, with an input
- * bar to ask questions and a clear-chat action. Shows an empty-state prompt before any messages
- * and a typing indicator while a reply is in flight.
+ * Conversational AI finance coach: a chat UI over the active conversation's persisted history,
+ * with an input bar to ask questions. A side drawer lists every past conversation so the user can
+ * resume, rename, delete, or start a new chat. Shows an empty-state prompt before any messages and
+ * a typing indicator while a reply is in flight.
  *
  * @param onBack navigates back.
- * @param vm exposes the chat history and send/clear actions, building context from finance data.
+ * @param vm exposes the session list, active history, and send/session actions.
  */
 @Composable
 fun AICoachScreen(onBack: () -> Unit, vm: AICoachViewModel = hiltViewModel()) {
     val messages by vm.messages.collectAsStateWithLifecycle()
+    val sessions by vm.sessions.collectAsStateWithLifecycle()
+    val currentId by vm.currentSessionId.collectAsStateWithLifecycle()
     val sending by vm.sending.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    var renaming by remember { mutableStateOf<ChatSessionEntity?>(null) }
 
     // Auto-scroll to the latest message (or the typing bubble) as the conversation grows.
     LaunchedEffect(messages.size, sending) {
@@ -68,81 +88,169 @@ fun AICoachScreen(onBack: () -> Unit, vm: AICoachViewModel = hiltViewModel()) {
         if (target > 0) listState.animateScrollToItem(target - 1)
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Surface(color = WarmRed) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = SweetCream)
-                    }
-                    Box(Modifier.size(40.dp).clip(CircleShape).background(SweetCream.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = SweetCream)
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text("Finatra AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = SweetCream)
-                        Text("Your personal finance coach", style = MaterialTheme.typography.labelMedium, color = SweetCream.copy(alpha = 0.75f))
-                    }
-                    if (messages.isNotEmpty()) {
-                        IconButton(onClick = vm::clear) {
-                            Icon(Icons.Filled.DeleteSweep, contentDescription = "Clear chat", tint = SweetCream)
-                        }
-                    }
-                }
-            }
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            HistoryDrawer(
+                sessions = sessions,
+                currentId = currentId,
+                onNewChat = { vm.newChat(); scope.launch { drawerState.close() } },
+                onOpen = { vm.switchSession(it); scope.launch { drawerState.close() } },
+                onRename = { renaming = it },
+                onDelete = { vm.deleteSession(it.id) },
+            )
         },
-        bottomBar = {
-            Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
-                Row(
-                    Modifier.fillMaxWidth().padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        placeholder = { Text("Ask anything about your finances…") },
-                        modifier = Modifier.weight(1f),
-                        maxLines = 4,
-                        keyboardOptions = KeyboardOptions(),
-                    )
-                    IconButton(
-                        onClick = { vm.send(input); input = "" },
-                        enabled = input.isNotBlank() && !sending,
+    ) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                Surface(color = WarmRed) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Box(Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.onPrimary)
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = SweetCream)
+                        }
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(SweetCream.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = SweetCream)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("Finatra AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = SweetCream)
+                            Text("Your personal finance coach", style = MaterialTheme.typography.labelMedium, color = SweetCream.copy(alpha = 0.75f))
+                        }
+                        IconButton(onClick = { vm.newChat() }) {
+                            Icon(Icons.Filled.Add, contentDescription = "New chat", tint = SweetCream)
+                        }
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.History, contentDescription = "Conversation history", tint = SweetCream)
                         }
                     }
                 }
-            }
-        },
-    ) { padding ->
-        if (messages.isEmpty() && !sending) {
-            Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    "Ask me to analyse your spending, suggest a budget, or check if you can afford something.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            LazyColumn(
-                Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                item { Spacer(Modifier.height(8.dp)) }
-                items(messages) { m -> ChatBubble(m) }
-                if (sending) item { TypingBubble() }
-                item { Spacer(Modifier.height(8.dp)) }
+            },
+            bottomBar = {
+                Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = input,
+                            onValueChange = { input = it },
+                            placeholder = { Text("Ask anything about your finances…") },
+                            modifier = Modifier.weight(1f),
+                            maxLines = 4,
+                            keyboardOptions = KeyboardOptions(),
+                        )
+                        IconButton(
+                            onClick = { vm.send(input); input = "" },
+                            enabled = input.isNotBlank() && !sending,
+                        ) {
+                            Box(Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.onPrimary)
+                            }
+                        }
+                    }
+                }
+            },
+        ) { padding ->
+            if (messages.isEmpty() && !sending) {
+                Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "Ask me to analyse your spending, suggest a budget, or check if you can afford something.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    item { Spacer(Modifier.height(8.dp)) }
+                    items(messages) { m -> ChatBubble(m) }
+                    if (sending) item { TypingBubble() }
+                    item { Spacer(Modifier.height(8.dp)) }
+                }
             }
         }
     }
+
+    renaming?.let { s ->
+        RenameDialog(
+            initial = s.title,
+            onDismiss = { renaming = null },
+            onConfirm = { vm.renameSession(s.id, it); renaming = null },
+        )
+    }
+}
+
+/** The conversation-history side panel: new-chat action plus every past session with rename/delete. */
+@Composable
+private fun HistoryDrawer(
+    sessions: List<ChatSessionEntity>,
+    currentId: Long?,
+    onNewChat: () -> Unit,
+    onOpen: (Long) -> Unit,
+    onRename: (ChatSessionEntity) -> Unit,
+    onDelete: (ChatSessionEntity) -> Unit,
+) {
+    ModalDrawerSheet {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("Conversations", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            NavigationDrawerItem(
+                label = { Text("New chat") },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                selected = false,
+                onClick = onNewChat,
+            )
+            Spacer(Modifier.height(8.dp))
+            if (sessions.isEmpty()) {
+                Text("No past conversations yet.", style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    items(sessions, key = { it.id }) { s ->
+                        NavigationDrawerItem(
+                            label = { Text(s.title, maxLines = 1) },
+                            selected = s.id == currentId,
+                            onClick = { onOpen(s.id) },
+                            badge = {
+                                Row {
+                                    IconButton(onClick = { onRename(s) }) {
+                                        Icon(Icons.Filled.Edit, contentDescription = "Rename", modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(onClick = { onDelete(s) }) {
+                                        Icon(Icons.Filled.Delete, contentDescription = "Delete", modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            },
+                            colors = NavigationDrawerItemDefaults.colors(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Dialog to rename a conversation. */
+@Composable
+private fun RenameDialog(initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var name by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename conversation") },
+        text = {
+            OutlinedTextField(name, { name = it }, label = { Text("Title") }, singleLine = true)
+        },
+        confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { onConfirm(name) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** A single chat bubble, styled and aligned by whether the message is from the user or the AI. */

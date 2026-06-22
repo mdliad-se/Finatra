@@ -21,7 +21,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -51,11 +54,16 @@ import com.jinatra.finatra.ui.components.OverlineLabel
 import com.jinatra.finatra.ui.theme.SweetCream
 import com.jinatra.finatra.util.Money
 
-/** Conversational budget planner. Chat → Finalize → review AI-extracted limits → apply. */
+/**
+ * Conversational budget planner. Chat → Finalize → review AI-extracted limits → apply. On
+ * applying all proposals it confirms success and navigates to the Budgets screen via
+ * [onBudgetsCreated]. The conversation is persisted; "New plan" starts a fresh one.
+ */
 @Composable
 fun BudgetChatScreen(
     onBack: () -> Unit,
     onOpenAiSettings: () -> Unit,
+    onBudgetsCreated: () -> Unit,
     vm: BudgetChatViewModel = hiltViewModel(),
 ) {
     val messages by vm.messages.collectAsStateWithLifecycle()
@@ -65,6 +73,8 @@ fun BudgetChatScreen(
     val baseCurrency by vm.baseCurrency.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf<String?>(null) }
+    // Non-null once budgets are created → drives the success dialog before navigating away.
+    var createdCount by remember { mutableStateOf<Int?>(null) }
     val listState = rememberLazyListState()
 
     // Auto-scroll to the latest bubble whenever a message arrives or the typing indicator toggles.
@@ -91,6 +101,11 @@ fun BudgetChatScreen(
                     Column(Modifier.weight(1f)) {
                         Text("Budget AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = SweetCream)
                         Text("Plan your budgets by chat", style = MaterialTheme.typography.labelMedium, color = SweetCream.copy(alpha = 0.75f))
+                    }
+                    if (vm.aiAvailable) {
+                        IconButton(onClick = { vm.newPlan(); notice = null; input = "" }) {
+                            Icon(Icons.Filled.Add, contentDescription = "New plan", tint = SweetCream)
+                        }
                     }
                 }
             }
@@ -173,7 +188,7 @@ fun BudgetChatScreen(
                     ExpressiveCard(Modifier.fillMaxWidth(), container = MaterialTheme.colorScheme.secondaryContainer) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             OverlineLabel("Proposed monthly budgets")
-                            TextButton(onClick = { vm.applyAll { notice = "Budgets created." } }) { Text("Apply all") }
+                            TextButton(onClick = { vm.applyAll { count -> createdCount = count } }) { Text("Apply all") }
                         }
                         proposals.forEach { sg ->
                             Row(
@@ -191,6 +206,24 @@ fun BudgetChatScreen(
             }
             item { Spacer(Modifier.height(8.dp)) }
         }
+    }
+
+    // Confirm the budgets were created, then take the user to the Budgets screen.
+    createdCount?.let { count ->
+        AlertDialog(
+            onDismissRequest = { createdCount = null; onBudgetsCreated() },
+            icon = { Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Budgets created") },
+            text = {
+                Text(
+                    if (count == 1) "1 monthly budget was added. You can track it on the Budgets screen."
+                    else "$count monthly budgets were added. You can track them on the Budgets screen."
+                )
+            },
+            confirmButton = {
+                Button(onClick = { createdCount = null; onBudgetsCreated() }) { Text("View budgets") }
+            },
+        )
     }
 }
 

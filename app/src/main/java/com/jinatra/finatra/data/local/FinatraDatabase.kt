@@ -18,6 +18,7 @@ import com.jinatra.finatra.data.local.entity.AuditLogEntity
 import com.jinatra.finatra.data.local.entity.BudgetEntity
 import com.jinatra.finatra.data.local.entity.CategoryEntity
 import com.jinatra.finatra.data.local.entity.ChatMessageEntity
+import com.jinatra.finatra.data.local.entity.ChatSessionEntity
 import com.jinatra.finatra.data.local.entity.ExchangeRateEntity
 import com.jinatra.finatra.data.local.entity.GoalEntity
 import com.jinatra.finatra.data.local.entity.RecurringTransactionEntity
@@ -26,7 +27,7 @@ import com.jinatra.finatra.data.local.entity.TransactionTemplateEntity
 
 /**
  * The app's Room database (PRD: fully local, offline-first storage).
- * Current schema version is 5; incremental upgrades are defined in [ALL_MIGRATIONS] and enum
+ * Current schema version is 6; incremental upgrades are defined in [ALL_MIGRATIONS] and enum
  * columns are handled by [Converters]. `exportSchema = true` writes JSON schemas for migration tests.
  */
 @Database(
@@ -39,10 +40,11 @@ import com.jinatra.finatra.data.local.entity.TransactionTemplateEntity
         AuditLogEntity::class,
         ExchangeRateEntity::class,
         GoalEntity::class,
+        ChatSessionEntity::class,
         ChatMessageEntity::class,
         TransactionTemplateEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

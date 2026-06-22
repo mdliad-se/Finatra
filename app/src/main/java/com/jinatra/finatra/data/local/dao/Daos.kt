@@ -11,6 +11,7 @@ import com.jinatra.finatra.data.local.entity.AuditLogEntity
 import com.jinatra.finatra.data.local.entity.BudgetEntity
 import com.jinatra.finatra.data.local.entity.CategoryEntity
 import com.jinatra.finatra.data.local.entity.ChatMessageEntity
+import com.jinatra.finatra.data.local.entity.ChatSessionEntity
 import com.jinatra.finatra.data.local.entity.ExchangeRateEntity
 import com.jinatra.finatra.data.local.entity.GoalEntity
 import com.jinatra.finatra.data.local.entity.RecurringTransactionEntity
@@ -245,12 +246,30 @@ interface GoalDao {
     @Query("SELECT COUNT(*) FROM goals") suspend fun count(): Int
 }
 
-/** Persisted AI Coach chat history (insert, observe in order, clear). */
+/**
+ * Persisted chat history (PRD 6.11): conversations grouped into [ChatSessionEntity] sessions,
+ * each holding ordered [ChatMessageEntity] messages. Sessions are listed per kind
+ * ("coach" / "budget") most-recently-updated first; deleting a session cascades to its messages.
+ */
 @Dao
 interface ChatDao {
+    // --- Sessions ---
+    @Insert suspend fun insertSession(s: ChatSessionEntity): Long
+    @Query("SELECT * FROM chat_sessions WHERE kind = :kind ORDER BY updatedAt DESC, id DESC")
+    fun observeSessions(kind: String): Flow<List<ChatSessionEntity>>
+    @Query("SELECT * FROM chat_sessions WHERE kind = :kind ORDER BY updatedAt DESC, id DESC LIMIT 1")
+    suspend fun latestSession(kind: String): ChatSessionEntity?
+    @Query("SELECT * FROM chat_sessions WHERE id = :id") suspend fun sessionById(id: Long): ChatSessionEntity?
+    @Query("UPDATE chat_sessions SET updatedAt = :at WHERE id = :id") suspend fun touchSession(id: Long, at: Long)
+    @Query("UPDATE chat_sessions SET title = :title, updatedAt = :at WHERE id = :id")
+    suspend fun renameSession(id: Long, title: String, at: Long)
+    @Query("DELETE FROM chat_sessions WHERE id = :id") suspend fun deleteSession(id: Long)
+
+    // --- Messages ---
     @Insert suspend fun insert(m: ChatMessageEntity): Long
-    @Query("SELECT * FROM chat_messages ORDER BY timestamp ASC, id ASC") fun observeAll(): Flow<List<ChatMessageEntity>>
-    @Query("DELETE FROM chat_messages") suspend fun clear()
+    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY timestamp ASC, id ASC")
+    fun observeBySession(sessionId: Long): Flow<List<ChatMessageEntity>>
+    @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId") suspend fun clearSession(sessionId: Long)
 }
 
 /** CRUD for reusable transaction templates. */
